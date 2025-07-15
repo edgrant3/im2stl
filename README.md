@@ -5,7 +5,7 @@ This simple project allows for easy conversion of RGB images into STLs for 3D pr
 ![Best Result](/assets/FinalResult.jpg)
 
 
-Source Image
+## Source Image
 ![Source Image](/assets/DSC02666_square.JPG)
 
 ![Subsurface 3D Image Demo](https://github.com/edgrant3/im2stl/blob/main/Demo.gif)
