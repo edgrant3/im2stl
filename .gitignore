@@ -1,3 +1,4 @@
 # Ignore Images in the top level of this directory
 /*.png
 /*.jpg
+venv*
