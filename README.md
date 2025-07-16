@@ -22,7 +22,7 @@ I used Python 3.11 but I don't expect many issues from using another recent Pyth
 
 If on Windows, run setup.bat to create and activate a virtual enviroment into which the dependencies from requirements.txt will be installed.
 
-For Unix, use setup.sh to achieve the same as above
+For Unix/Linux, use setup.sh to achieve the same as above
 
 
 
