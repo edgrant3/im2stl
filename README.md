@@ -18,6 +18,8 @@ NOTE: the border was generated separately in CAD software
 ## Setup Instructions
 Jupyter notebook makes for easy prototyping and cell-by-cell execution.
 
+I used Python 3.11 but I don't expect many issues from using another recent Python 3 version.
+
 If on Windows, run setup.bat to create and activate a virtual enviroment into which the dependencies from requirements.txt will be installed.
 
 For Unix, use setup.sh to achieve the same as above
