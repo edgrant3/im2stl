@@ -7,11 +7,22 @@ My personal goal with this mini project was to write everything (e.g. the tessel
 ## Final Result - White PLA 3D Print (120mm^2) 
 ![Best Result](/assets/FinalResult.jpg)
 
+NOTE: the border was generated separately in CAD software
+
 ## Source Image
 ![Source Image](/assets/DSC02666_square.JPG)
 
-## Misc.
-
+## Demo GIF
 ![Subsurface 3D Image Demo](https://github.com/edgrant3/im2stl/blob/main/Demo.gif)
 
-NOTE: the border in the first image was generated separately in slicing software
+## Setup Instructions
+Jupyter notebook makes for easy prototyping and cell-by-cell execution.
+
+If on Windows, run setup.bat to create and activate a virtual enviroment into which the dependencies from requirements.txt will be installed.
+
+For Unix, use setup.sh to achieve the same as above
+
+
+
+
+
