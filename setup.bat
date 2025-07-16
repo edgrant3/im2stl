@@ -3,13 +3,14 @@ setlocal
 
 REM Define virtual environment directory name
 set VENV_DIR=venv
+set PYTHON_VERSION=3.12
 
 REM Check if virtual environment already exists
 if exist %VENV_DIR%\ (
     echo Virtual environment "%VENV_DIR%" already exists. Skipping creation.
 ) else (
     echo Creating virtual environment in "%VENV_DIR%"...
-    python -m venv %VENV_DIR%
+    py -%PYTHON_VERSION% -m venv %VENV_DIR%
     echo Virtual environment created.
 )
 
