@@ -1,4 +1,6 @@
 numpy
+numpy-stl
+lib3mf
 opencv-python
 matplotlib
 jupyter
