@@ -1,8 +1,10 @@
 # im2stl
 
-This simple project allows for easy conversion of RGB images into STLs for 3D prints that use backlight (like sunlight streaming in from a window) to display the image. The effect is achieved via slightly translucent filament printed at varying thicknesses (layer heights) across the image plane. Obviously, light-colored PLA is highly reccommended for these prints!
+This simple project allows for easy conversion of an RGB image to a [lithophane](https://en.wikipedia.org/wiki/Lithophane) in STL or 3MF format. 
 
-My personal goal with this mini project was to write everything (e.g. the tessellation/triangulation of the mesh) from scratch in Python and get something printed on my new Bambu Labs P1S within a couple evenings. I had a blast putting this together and I'm pleasantly suprised by the final effect!
+Lithophanes use backlight (like sunlight streaming in from a window) to display an image. They take advantage of material thickness to attenuate the backlighting to replicate regions of light and dark in the source image. The effect is achieved via slightly translucent filament printed at varying thicknesses (layer heights) across the image plane. Obviously, light-colored PLA is highly reccommended for these prints!
+
+My personal goal with this mini project was to write everything (e.g. the tessellation/triangulation of the mesh) from scratch (without referencing any other implementation or examples) in Python and get something printed on my new Bambu Labs P1S within a couple evenings. I had a blast putting this together and I'm pleasantly suprised by the final effect! My ongoing effort is to make a simple GUI that allows the users to intuitively select parameters like resulting model dimensions and border settings.
 
 ## Final Result - White PLA 3D Print (120mm^2) 
 ![Best Result](/assets/FinalResult.jpg)
