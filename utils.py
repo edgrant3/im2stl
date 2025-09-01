@@ -99,7 +99,7 @@ def convert_stl_to_3mf(stl_path, units='mm'):
     elif units.lower() in ['in', 'inch', 'inches']:
         unit_selection = lib3mf.ModelUnit.Inch
     else:
-        raise Exception('Method does not support given units: {units}')
+        raise Exception(f'Method does not support given units: {units}')
 
     model.SetUnit(unit_selection)    
 
