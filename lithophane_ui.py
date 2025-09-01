@@ -49,12 +49,19 @@ class LithGUI:
         self.control_panel = None
 
         self._canvas_tag_image = "canvas_image"
+        self._canvas_tag_rect = "cropping_rectangle"
         self._canvas_items = {}
 
         self.create_widgets()
         self.bind_events()
 
+        self.setup_is_complete = False
+        self.root.after(100, self.mark_setup_complete)
+
         self.root.mainloop()
+
+    def mark_setup_complete(self):
+        self.setup_is_complete = True
 
     def get_screen_dims(self):
         return (self.root.winfo_screenwidth(), self.root.winfo_screenheight())
@@ -92,6 +99,16 @@ class LithGUI:
 
         # Bind canvas image scaling to mouse scroll wheel
         self.root.bind('<MouseWheel>', lambda event: self.scale_canvas_image_from_scroll(event))
+
+        # Bind root window resizing
+        self.root.bind("<Configure>", self.handle_resize)
+
+    def handle_resize(self, event):
+        if self.setup_is_complete:
+            return
+            print(f'resizing to: {event.width}, {event.height}')
+            # self.create_control_panel()
+            # self.create_canvas_image()
 
     def handle_canvas_click(self, event):
         global start_x, start_y
@@ -174,6 +191,9 @@ class LithGUI:
 
         self.canvas = tk.Canvas(self.root, width=self.canvas_w, height=self.canvas_h, 
                                 bg=RGB2HEX(self.CANVAS_COLOR), borderwidth=0, highlightthickness=0)
+        
+        self._canvas_items[self._canvas_tag_rect] = {}
+        self._canvas_items[self._canvas_tag_rect]["item"] = self.canvas.create_rectangle(50, 50, 550, 550, outline="red", width=1, tags=self._canvas_tag_rect)
 
     def load_image(self):
         self.image_path = filedialog.askopenfilename(
@@ -190,7 +210,7 @@ class LithGUI:
         self.create_canvas_image()
         self._canvas_items[self._canvas_tag_image]["scale"] = scale
 
-    def create_canvas_image(self, centered=False):
+    def create_canvas_image(self, centered=True):
         self.canvas.delete(self._canvas_tag_image)
 
         pos = [self.tk_image.width() / 2, 
@@ -205,6 +225,9 @@ class LithGUI:
         self._canvas_items[self._canvas_tag_image]["scale"] = 1.0
         self._canvas_items[self._canvas_tag_image]["item"] = self.canvas.create_image(pos[0], pos[1], anchor=tk.CENTER, image=self.tk_image, 
                                                                                       tags=self._canvas_tag_image)
+        
+        print(f'putting {self._canvas_tag_image} behind {self._canvas_tag_rect}')
+        self.canvas.tag_lower(self._canvas_tag_image, self._canvas_tag_rect)
         
     def move_canvas_image(self, dx, dy):
         w_c, h_c = self.get_canvas_dims()
