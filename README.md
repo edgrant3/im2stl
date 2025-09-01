@@ -1,6 +1,6 @@
 # im2stl
 
-This simple project allows for easy conversion of an RGB image to a [lithophane](https://en.wikipedia.org/wiki/Lithophane){:target="_blank"} in STL or 3MF format. 
+This simple project allows for easy conversion of an RGB image to a [lithophane](https://en.wikipedia.org/wiki/Lithophane) in STL or 3MF format. 
 
 Lithophanes use backlight (like sunlight streaming in from a window) to display an image. They take advantage of material thickness to attenuate the backlighting to replicate regions of light and dark in the source image. The effect is achieved via slightly translucent filament printed at varying thicknesses (layer heights) across the image plane. Obviously, light-colored PLA is highly reccommended for these prints!
 
