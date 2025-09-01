@@ -208,17 +208,18 @@ class LithGUI:
         
     def move_canvas_image(self, dx, dy):
         w_c, h_c = self.get_canvas_dims()
-        w, h = self.tk_image.width(), self.tk_image.height()
+        # w, h = self.tk_image.width(), self.tk_image.height()
         curr_pos = self._canvas_items[self._canvas_tag_image]["pos"]
 
-        print(curr_pos)
+        # if np.floor(curr_pos[0] + dx) < - w // 2 or np.ceil(curr_pos[0] + dx) > w_c + w // 2:
+        #     dx = 0
+        # if np.floor(curr_pos[1] + dy) < - h // 2 or np.ceil(curr_pos[1] + dy) > h_c + h // 2:
+        #     dy = 0
 
-        if np.floor(curr_pos[0] + dx) < - w // 2 or np.ceil(curr_pos[0] + dx) > w_c + w // 2:
-            print(f'TRIGGERED W')
+        if curr_pos[0] + dx < 0 or curr_pos[0] + dx >= w_c:
             dx = 0
 
-        if np.floor(curr_pos[1] + dy) < - h // 2 or np.ceil(curr_pos[1] + dy) > h_c + h // 2:
-            print(f'TRIGGERED H')
+        if curr_pos[1] + dy < 0 or curr_pos[1] + dy >= h_c:
             dy = 0
 
         self.canvas.move(self._canvas_tag_image, dx, dy)
