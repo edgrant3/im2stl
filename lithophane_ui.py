@@ -16,6 +16,7 @@ def cv2_to_tk(bgr_img):
 class LithGUI:
     ALL_PADDING = 10
     CONTROL_PANEL_WIDTH = 0.2
+    CANVAS_COLOR = (127, 127, 127)
 
     def __init__(self, fullscreen=False):
         self.root = tk.Tk()
@@ -38,6 +39,7 @@ class LithGUI:
 
         self.image_path = None
         self.original_image = None # numpy.ndarray in BGR from cv2
+        self.intermediate_image = None # numpy.ndarray in BGR from cv2
         self.tk_image = None # image to render to GUI, converted from cv2-manipulated image
         
         self.canvas = None
@@ -81,6 +83,9 @@ class LithGUI:
         # Bind canvas image move to click and drag
         self.canvas.tag_bind(self._canvas_tag_image, '<ButtonPress-1>', self.start_drag)
         self.canvas.tag_bind(self._canvas_tag_image, '<B1-Motion>', lambda event: self.canvas_drag(event, id=self._canvas_tag_image))
+
+        # Bind canvas image scaling to mouse scroll wheel
+        self.root.bind('<MouseWheel>', lambda event: self.scale_canvas_image_from_scroll(event))
 
     def start_drag(self, event):
         global start_x, start_y
@@ -154,11 +159,8 @@ class LithGUI:
         self.canvas_w = int(round((1.0 - self.CONTROL_PANEL_WIDTH) * self.root_w))
         self.canvas_h = self.root_h
 
-        # print(f'canvas W, H: {self.canvas_w}, {self.canvas_h}')
-        # print(f'window W, H: {self.root.winfo_width()}, {self.root.winfo_height()}')
-
         self.canvas = tk.Canvas(self.root, width=self.canvas_w, height=self.canvas_h, 
-                                bg=RGB2HEX((220,0,0)), borderwidth=0, highlightthickness=0)
+                                bg=RGB2HEX(self.CANVAS_COLOR), borderwidth=0, highlightthickness=0)
 
     def load_image(self):
         self.image_path = filedialog.askopenfilename(
@@ -168,10 +170,12 @@ class LithGUI:
             ("All Files", "*.*")
         ])
         self.original_image = cv2.imread(self.image_path)
+        self.intermediate_image = cv2.imread(self.image_path)
         self.tk_image = cv2_to_tk(self.original_image)
 
-        self.fit_image_to_canvas()
+        scale = self.fit_image_to_canvas()
         self.create_canvas_image()
+        self._canvas_items[self._canvas_tag_image]["scale"] = scale
 
     def create_canvas_image(self, centered=True):
         self.canvas.delete(self._canvas_tag_image)
@@ -185,22 +189,45 @@ class LithGUI:
 
         self._canvas_items[self._canvas_tag_image] = {}
         self._canvas_items[self._canvas_tag_image]["pos"] = pos
+        self._canvas_items[self._canvas_tag_image]["scale"] = 1.0
         self._canvas_items[self._canvas_tag_image]["item"] = self.canvas.create_image(pos[0], pos[1], anchor=anchor, image=self.tk_image, 
                                                                                       tags=self._canvas_tag_image)
         
     def move_canvas_image(self, dx, dy):
         self.canvas.move(self._canvas_tag_image, dx, dy)
 
+    def scale_canvas_image_from_scroll(self, event):
+        try:
+            current_scale = self._canvas_items[self._canvas_tag_image]["scale"]
+            if event.delta > 0:
+                self.scale_canvas_image(current_scale * 1.1)
+            else:
+                self.scale_canvas_image(current_scale * 0.9)
+        except:
+            pass
+    
+
+    def scale_canvas_image(self, scale):
+        new_dims = (int(scale * self.intermediate_image.shape[1]), 
+                    int(scale * self.intermediate_image.shape[0]))
+        self.tk_image = cv2_to_tk(cv2.resize(self.intermediate_image, new_dims, interpolation=cv2.INTER_CUBIC))
+        self._canvas_items[self._canvas_tag_image]["scale"] = scale
+
+        self.canvas.itemconfig(self._canvas_tag_image, image=self.tk_image)
+        self.canvas.image = self.tk_image
+
+
     def fit_image_to_canvas(self):
         w_c, h_c = self.get_canvas_dims()
         w_c, h_c = float(w_c), float(h_c)
-        w, h = float(self.tk_image.width()), float(self.tk_image.height())
+        w, h = float(self.intermediate_image.shape[1]), float(self.intermediate_image.shape[0])
 
         if not ((w > w_c) or (h > h_c)):
             return
                 
         sf = min((w_c / w), (h_c / h))
-        self.tk_image = cv2_to_tk(cv2.resize(self.original_image, (int(w * sf), int(h * sf)), interpolation=cv2.INTER_CUBIC))
+        self.tk_image = cv2_to_tk(cv2.resize(self.intermediate_image, (int(w * sf), int(h * sf)), interpolation=cv2.INTER_CUBIC))
+        return sf
 
         
 
