@@ -1,5 +1,6 @@
 import tkinter as tk
 import cv2
+import numpy as np
 from tkinter import N, S, E, W
 from tkinter import filedialog
 from PIL import Image, ImageTk
@@ -17,6 +18,8 @@ class LithGUI:
     ALL_PADDING = 10
     CONTROL_PANEL_WIDTH = 0.2
     CANVAS_COLOR = (127, 127, 127)
+    LARGE_PX_INCREMENT = 10
+    SMALL_PX_INCREMENT = 1
 
     def __init__(self, fullscreen=False):
         self.root = tk.Tk()
@@ -75,31 +78,41 @@ class LithGUI:
         self.root.bind('<Escape>', lambda x: self.root.destroy())
 
         # Bind canvas image move to arrow keys
-        self.root.bind(   '<Up>', lambda event: self.move_canvas_image( 0, -10))
-        self.root.bind( '<Down>', lambda event: self.move_canvas_image( 0,  10))
-        self.root.bind( '<Left>', lambda event: self.move_canvas_image(-10,  0))
-        self.root.bind('<Right>', lambda event: self.move_canvas_image( 10,  0))
+        inc = self.SMALL_PX_INCREMENT
+        self.root.bind(   '<Up>', lambda event: self.move_canvas_image( 0, -inc))
+        self.root.bind( '<Down>', lambda event: self.move_canvas_image( 0,  inc))
+        self.root.bind( '<Left>', lambda event: self.move_canvas_image(-inc,  0))
+        self.root.bind('<Right>', lambda event: self.move_canvas_image( inc,  0))
 
         # Bind canvas image move to click and drag
-        self.canvas.tag_bind(self._canvas_tag_image, '<ButtonPress-1>', self.start_drag)
-        self.canvas.tag_bind(self._canvas_tag_image, '<B1-Motion>', lambda event: self.canvas_drag(event, id=self._canvas_tag_image))
+        # self.canvas.tag_bind(self._canvas_tag_image, '<ButtonPress-1>', self.start_drag)
+        # self.canvas.tag_bind(self._canvas_tag_image, '<B1-Motion>', lambda event: self.canvas_drag(event, id=self._canvas_tag_image))
+        self.canvas.bind('<ButtonPress-1>', self.handle_canvas_click)
+        self.canvas.bind('<B1-Motion>', lambda event: self.handle_canvas_drag(event))
 
         # Bind canvas image scaling to mouse scroll wheel
         self.root.bind('<MouseWheel>', lambda event: self.scale_canvas_image_from_scroll(event))
 
-    def start_drag(self, event):
+    def handle_canvas_click(self, event):
         global start_x, start_y
         # Record starting position of mouse click
         start_x = event.x
         start_y = event.y
 
-    def canvas_drag(self, event, id):
+    def handle_canvas_drag(self, event, id=None):
         global start_x, start_y
+
+        if id is None:
+            id = self._canvas_tag_image
+
         # Calculate displacement
         dx = event.x - start_x
         dy = event.y - start_y
         # Move the image on canvas
-        self.canvas.move(id, dx, dy)
+        if id == self._canvas_tag_image:
+            self.move_canvas_image(dx, dy)
+        else:
+            self.canvas.move(id, dx, dy)
         # Update start position for the next motion event
         start_x, start_y = event.x, event.y
 
@@ -177,24 +190,40 @@ class LithGUI:
         self.create_canvas_image()
         self._canvas_items[self._canvas_tag_image]["scale"] = scale
 
-    def create_canvas_image(self, centered=True):
+    def create_canvas_image(self, centered=False):
         self.canvas.delete(self._canvas_tag_image)
 
-        pos = [0, 0]
-        anchor = tk.NW
+        pos = [self.tk_image.width() / 2, 
+               self.tk_image.height() / 2]
+        
         if centered:
             w, h = self.get_canvas_dims()
             pos = [float(w) / 2.0, float(h) / 2.0]
-            anchor = tk.CENTER
 
         self._canvas_items[self._canvas_tag_image] = {}
         self._canvas_items[self._canvas_tag_image]["pos"] = pos
         self._canvas_items[self._canvas_tag_image]["scale"] = 1.0
-        self._canvas_items[self._canvas_tag_image]["item"] = self.canvas.create_image(pos[0], pos[1], anchor=anchor, image=self.tk_image, 
+        self._canvas_items[self._canvas_tag_image]["item"] = self.canvas.create_image(pos[0], pos[1], anchor=tk.CENTER, image=self.tk_image, 
                                                                                       tags=self._canvas_tag_image)
         
     def move_canvas_image(self, dx, dy):
+        w_c, h_c = self.get_canvas_dims()
+        w, h = self.tk_image.width(), self.tk_image.height()
+        curr_pos = self._canvas_items[self._canvas_tag_image]["pos"]
+
+        print(curr_pos)
+
+        if np.floor(curr_pos[0] + dx) < - w // 2 or np.ceil(curr_pos[0] + dx) > w_c + w // 2:
+            print(f'TRIGGERED W')
+            dx = 0
+
+        if np.floor(curr_pos[1] + dy) < - h // 2 or np.ceil(curr_pos[1] + dy) > h_c + h // 2:
+            print(f'TRIGGERED H')
+            dy = 0
+
         self.canvas.move(self._canvas_tag_image, dx, dy)
+        self._canvas_items[self._canvas_tag_image]["pos"][0] += dx
+        self._canvas_items[self._canvas_tag_image]["pos"][1] += dy
 
     def scale_canvas_image_from_scroll(self, event):
         try:
@@ -206,11 +235,15 @@ class LithGUI:
         except:
             pass
     
-
     def scale_canvas_image(self, scale):
         new_dims = (int(scale * self.intermediate_image.shape[1]), 
                     int(scale * self.intermediate_image.shape[0]))
+        
+        interp_method = cv2.INTER_CUBIC if scale < 1.0 else cv2.INTER_NEAREST
+
         self.tk_image = cv2_to_tk(cv2.resize(self.intermediate_image, new_dims, interpolation=cv2.INTER_CUBIC))
+
+        # print(f'scale: {self._canvas_items[self._canvas_tag_image]["scale"]} --> {scale}')
         self._canvas_items[self._canvas_tag_image]["scale"] = scale
 
         self.canvas.itemconfig(self._canvas_tag_image, image=self.tk_image)
