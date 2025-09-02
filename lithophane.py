@@ -34,6 +34,8 @@ def create_lithophane(args, img_path):
     ar = args.image_width_mm / args.image_height_mm
 
     # Crop image as close to the proper aspect ratio as possible
+    offset
+    img_bgr = crop_to_aspect_ratio(img_bgr, ar, True, offset)
 
     # Compute strech values for each axis to make the result exactly match desired dimensions
     # NOTE: one of the 2 values will always be 1.0
