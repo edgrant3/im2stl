@@ -241,7 +241,7 @@ class LithGUI:
             self.move_canvas_image(dx, dy)
         elif self.active_item_tag == self._canvas_tag_rect:
             delta_coords = self.get_crop_bounding_box_update(start_x, start_y, dx, dy, location=self.active_item_loc)    
-            self.update_crop_rectangle(delta_coords)
+            self.update_crop_rectangle_relative(delta_coords)
         else:
             self.canvas.move(self.active_item_tag, dx, dy)
         # Update start position for the next motion event
@@ -296,6 +296,11 @@ class LithGUI:
         self.load_img_button = tk.Button(self.control_panel, command=self.load_image, text="Load Image")
         self.load_img_button.grid(row=6, column=0, sticky=S)
 
+    def clear_canvas(self):
+        if self.canvas is not None:
+            self.canvas.delete('all')
+            self._canvas_items = {}
+
     def create_canvas(self):
         if self.canvas is not None:
             self.canvas.delete('all')
@@ -308,14 +313,22 @@ class LithGUI:
                                 bg=self.CANVAS_COLOR, borderwidth=0, highlightthickness=0)
         
 
-    def create_crop_rectangle(self):
-
-        pos = [10, 10]
-        dims = [10, 10]
+    def create_crop_rectangle(self, coords=None):
 
         self._canvas_items[self._canvas_tag_rect] = {}
 
-        x1, y1, x2, y2 = pos[0], pos[1], pos[0] + dims[0] - 1, pos[1] + dims[1] - 1
+        if coords is None:
+            coords = [x for x in self.canvas.bbox(self._canvas_tag_image)]
+            coords[2] -= 1
+            coords[3] -= 1
+            # print(coords, self.tk_image.width(), self.tk_image.height())
+
+        if not coords:
+            pos = [10, 10]
+            dims = [10, 10]
+            coords = pos[0], pos[1], pos[0] + dims[0] - 1, pos[1] + dims[1] - 1
+
+        x1, y1, x2, y2 = coords
 
         self._canvas_items[self._canvas_tag_rect]["item"] = self.canvas.create_rectangle(x1, y1, x2, y2, outline=self.CROP_COLOR, width=1, 
                                                                                          tags=self._canvas_tag_rect)                
@@ -400,8 +413,12 @@ class LithGUI:
         elif location == RectLoc.CENTER:
             return [dx, dy, dx, dy]
 
+    def update_crop_rectangle_absolute(self, coords):
+        self.canvas.coords(self._canvas_tag_rect, coords)
+        self.draw_crop_corner_dots(coords)
+        self.draw_crop_center_crosshair(coords)
 
-    def update_crop_rectangle(self, delta_coords):
+    def update_crop_rectangle_relative(self, delta_coords):
         x1, y1, x2, y2 = self.canvas.coords(self._canvas_tag_rect)
         dx1, dy1, dx2, dy2 = delta_coords
 
@@ -432,7 +449,6 @@ class LithGUI:
         self.canvas.coords(self._canvas_tag_rect, coords)
         self.draw_crop_corner_dots(coords)
         self.draw_crop_center_crosshair(coords)
-
 
 
     def crop_box_location(self, x, y, radius=10):
@@ -477,6 +493,7 @@ class LithGUI:
         return RectLoc.NULL
 
     def load_image(self):
+        self.clear_canvas()
         self.image_path = filedialog.askopenfilename(
         title="Select Image File",
         filetypes=[
@@ -554,6 +571,11 @@ class LithGUI:
         self.canvas.itemconfig(self._canvas_tag_image, image=self.tk_image)
         self.canvas.image = self.tk_image
 
+    # def fit_crop_to_image(self):
+    #     coords = [x for x in self.canvas.bbox(self._canvas_tag_image)]
+    #     coords[2] -= 1
+    #     coords[3] -= 1
+    #     self.update_crop_rectangle_absolute(coords)
 
     def fit_image_to_canvas(self):
         w_c, h_c = self.get_canvas_dims()
