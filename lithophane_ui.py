@@ -453,8 +453,8 @@ class LithGUI:
         if dist[corner] <= radius:
             return RectLoc(corner)
         
-        between_x = (diff[0,0] >= 0) and (diff[0,1] <= 0)
-        between_y = (diff[1,0] >= 0) and (diff[1,2] <= 0)
+        between_x = (diff[0,0] >= -radius) and (diff[0,1] <= radius)
+        between_y = (diff[1,0] >= -radius) and (diff[1,2] <= radius)
 
         # y1, x2, y2, x1
         edge_diff_abs = np.array([diff_abs[1,0], 
@@ -464,7 +464,7 @@ class LithGUI:
         
         side = np.argmin(edge_diff_abs)
         
-        if (between_x or between_y) and edge_diff_abs[side] <= radius:
+        if (between_x and between_y) and edge_diff_abs[side] <= radius:
             return RectLoc(side + 4)
         
 
