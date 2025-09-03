@@ -1,6 +1,7 @@
 import tkinter as tk
 import cv2
 import numpy as np
+from enum import Enum
 from tkinter import N, S, E, W
 from tkinter import filedialog
 from PIL import Image, ImageTk
@@ -14,39 +15,64 @@ def cv2_to_tk(bgr_img):
     # 3) Convert PIL Image to ImageTk PhtoImage
     return ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)))
 
+class RectLoc(Enum):
+    NULL = -1
+    TOP_LEFT = 0
+    TOP_RIGHT = 1
+    BOTTOM_LEFT = 2
+    BOTTOM_RIGHT = 3
+    TOP = 4
+    RIGHT = 5
+    BOTTOM = 6
+    LEFT = 7
+    CENTER = 8
+
 rectangle_location_flip_ids = \
 {
-    # Top Left Corner
-    0: {'x'  : 1,
-        'y'  : 2},
-        
-    # Top Right Corner
-    1: {'x'  : 0,
-        'y'  : 3},
+    RectLoc.TOP_LEFT: {
+        'x'  : RectLoc.TOP_RIGHT,
+        'y'  : RectLoc.BOTTOM_LEFT
+    },
 
-    # Bottom Left Corner
-    2: {'x'  : 3,
-        'y'  : 0},
+    RectLoc.TOP_RIGHT: {
+        'x'  : RectLoc.TOP_LEFT,
+        'y'  : RectLoc.BOTTOM_RIGHT
+    },
 
-    # Bottom Right Corner
-    3: {'x'  : 2,
-        'y'  : 1},
+    RectLoc.BOTTOM_LEFT: {
+        'x'  : RectLoc.BOTTOM_RIGHT,
+        'y'  : RectLoc.TOP_LEFT
+    },
 
-    # Top Edge
-    4: {'x'  : 4,
-        'y'  : 6},
+    RectLoc.BOTTOM_RIGHT: {
+        'x'  : RectLoc.BOTTOM_LEFT,
+        'y'  : RectLoc.TOP_RIGHT
+    },
 
-    # Right Edge
-    5: {'x'  : 7,
-        'y'  : 5},
+    RectLoc.TOP: {
+        'x'  : RectLoc.TOP,
+        'y'  : RectLoc.BOTTOM
+    },
 
-    # Bottom Edge
-    6: {'x'  : 6,
-        'y'  : 4},
-    
-    # Left Edge
-    7: {'x'  : 5,
-        'y'  : 7}
+    RectLoc.RIGHT: {
+        'x'  : RectLoc.LEFT,
+        'y'  : RectLoc.RIGHT
+    },
+
+    RectLoc.BOTTOM: {
+        'x'  : RectLoc.BOTTOM,
+        'y'  : RectLoc.TOP
+    },
+
+    RectLoc.LEFT: {
+        'x'  : RectLoc.RIGHT,
+        'y'  : RectLoc.LEFT
+    },
+
+    RectLoc.CENTER: {
+        'x'  : RectLoc.CENTER,
+        'y'  : RectLoc.CENTER
+    },
 }
 
 class LithGUI:
@@ -159,30 +185,24 @@ class LithGUI:
         # https://tkdocs.com/shipman/cursors.html
 
         loc = self.crop_box_location(event.x, event.y)
-        if loc == 0:
-            # Top left corner
+        if loc == RectLoc.TOP_LEFT:
             self.canvas.config(cursor="top_left_corner")            
-        elif loc == 1:
-            # Top right corner
+        elif loc == RectLoc.TOP_RIGHT:
             self.canvas.config(cursor="top_right_corner")
-        elif loc == 2:
-            # Bottom left corner
+        elif loc == RectLoc.BOTTOM_LEFT:
             self.canvas.config(cursor="bottom_left_corner")
-        elif loc == 3:
-            # Bottom right corner
+        elif loc == RectLoc.BOTTOM_RIGHT:
             self.canvas.config(cursor="bottom_right_corner")
-        elif loc == 4:
-            # Top edge
+        elif loc == RectLoc.TOP:
             self.canvas.config(cursor="bottom_side")
-        elif loc == 5:
-            # Right edge
+        elif loc == RectLoc.RIGHT:
             self.canvas.config(cursor="left_side")
-        elif loc == 6:
-            # Bottom edge
+        elif loc == RectLoc.BOTTOM:
             self.canvas.config(cursor="top_side")
-        elif loc == 7:
-            # Left edge
+        elif loc == RectLoc.LEFT:
             self.canvas.config(cursor="right_side")
+        elif loc == RectLoc.CENTER:
+            self.canvas.config(cursor="diamond_cross")
         else:
             # Not interacting with crop window, revert to normal arrow
             self.canvas.config(cursor=self.DEFAULT_CANVAS_CURSOR)
@@ -210,7 +230,7 @@ class LithGUI:
         if self.active_item_loc is None:
             self.active_item_loc = self.crop_box_location(start_x, start_y)
 
-        if self.active_item_loc >= 0:
+        if self.active_item_loc.value >= 0:
             id = self._canvas_tag_rect
 
         if self.active_item_tag is None:
@@ -256,6 +276,7 @@ class LithGUI:
                                                variable=self.ar_lock_val, 
                                                background=RGB2HEX((255,255,255)),
                                                onvalue=1, offvalue=0)
+
         self.ar_lock_checkbox.grid(row=2, column=0, columnspan=control_panel_cols, sticky=W)
 
         # Add + Pack Entry, Label, and Text note for pixel_size in mm
@@ -293,8 +314,6 @@ class LithGUI:
         dims = [10, 10]
 
         self._canvas_items[self._canvas_tag_rect] = {}
-        # self._canvas_items[self._canvas_tag_rect]["pos"] = pos
-        # self._canvas_items[self._canvas_tag_rect]["dims"] = dims
 
         x1, y1, x2, y2 = pos[0], pos[1], pos[0] + dims[0] - 1, pos[1] + dims[1] - 1
 
@@ -303,6 +322,7 @@ class LithGUI:
 
         self._canvas_items[self._canvas_tag_rect]["corners"] = []
         self.draw_crop_corner_dots([x1, y1, x2, y2])
+        self.draw_crop_center_crosshair([x1, y1, x2, y2])
             
     def draw_crop_corner_dots(self, coords, radius=3):
         x1, y1, x2, y2 = coords
@@ -335,38 +355,34 @@ class LithGUI:
             else:
                 self.canvas.coords(f'c{i}', xx1, yy1, xx2, yy2)
 
-            
+    def draw_crop_center_crosshair(self, coords):
+        pass
+    
     def get_crop_bounding_box_update(self, start_x, start_y, dx, dy, location=None):
 
         if location is None:
             location = self.crop_box_location(start_x, start_y)
 
-        if location == -1:
+        if location == RectLoc.NULL:
             return [0, 0, 0, 0]        
-        elif location == 0:
-            # Top left corner
+        elif location == RectLoc.TOP_LEFT:
             return [dx, dy, 0, 0]
-        elif location == 1:
-            # Top right corner
+        elif location == RectLoc.TOP_RIGHT:
             return [0, dy, dx, 0]
-        elif location == 2:
-            # Bottom left corner
+        elif location == RectLoc.BOTTOM_LEFT:
             return [dx, 0, 0, dy]
-        elif location == 3:
-            # Bottom right corner
+        elif location == RectLoc.BOTTOM_RIGHT:
             return [0, 0, dx, dy]
-        elif location == 4:
-            # Top edge
+        elif location == RectLoc.TOP:
             return [0, dy, 0, 0]
-        elif location == 5:
-            # Right edge
+        elif location == RectLoc.RIGHT:
             return [0, 0, dx, 0]
-        elif location == 6:
-            # Bottom edge
+        elif location == RectLoc.BOTTOM:
             return [0, 0, 0, dy]
-        elif location == 7:
-            # Left edge
+        elif location == RectLoc.LEFT:
             return [dx, 0, 0, 0]
+        elif location == RectLoc.CENTER:
+            return [dx, dy, dx, dy]
 
 
     def update_crop_rectangle(self, delta_coords):
@@ -404,7 +420,7 @@ class LithGUI:
     def crop_box_location(self, x, y, radius=10):
         coords = self.canvas.coords(self._canvas_tag_rect)
         if not coords:
-            return -1
+            return RectLoc.NULL
         
         x1, y1, x2, y2 = coords
         corners = np.array([[x1, x2, x1, x2], 
@@ -417,7 +433,7 @@ class LithGUI:
         corner = np.argmin(dist)
 
         if dist[corner] <= radius:
-            return corner
+            return RectLoc(corner)
         
         between_x = (diff[0,0] >= 0) and (diff[0,1] <= 0)
         between_y = (diff[1,0] >= 0) and (diff[1,2] <= 0)
@@ -430,9 +446,15 @@ class LithGUI:
         
         side = np.argmin(edge_diff_abs)
         
-        condition = (between_x or between_y) and edge_diff_abs[side] <= radius
+        # condition = (between_x or between_y) and edge_diff_abs[side] <= radius        
+        # return side + 4 if condition else -1
+        if (between_x or between_y) and edge_diff_abs[side] <= radius:
+            return RectLoc(side + 4)
         
-        return side + 4 if condition else -1
+
+        center = [float(x2 - x2 + 1) / 2.0, float(y2 - y1 + 1) / 2.0]
+
+        return RectLoc.NULL
 
     def load_image(self):
         self.image_path = filedialog.askopenfilename(
@@ -466,8 +488,7 @@ class LithGUI:
         self._canvas_items[self._canvas_tag_image]["scale"] = 1.0
         self._canvas_items[self._canvas_tag_image]["item"] = self.canvas.create_image(pos[0], pos[1], anchor=tk.CENTER, image=self.tk_image, 
                                                                                       tags=self._canvas_tag_image)
-        
-        # print(f'putting {self._canvas_tag_image} behind {self._canvas_tag_rect}')
+
         # self.canvas.tag_lower(self._canvas_tag_image, self._canvas_tag_rect)
         
     def move_canvas_image(self, dx, dy):
@@ -508,7 +529,6 @@ class LithGUI:
 
         self.tk_image = cv2_to_tk(cv2.resize(self.intermediate_image, new_dims, interpolation=cv2.INTER_CUBIC))
 
-        # print(f'scale: {self._canvas_items[self._canvas_tag_image]["scale"]} --> {scale}')
         self._canvas_items[self._canvas_tag_image]["scale"] = scale
 
         self.canvas.itemconfig(self._canvas_tag_image, image=self.tk_image)
