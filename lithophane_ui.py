@@ -562,9 +562,9 @@ class LithGUI:
         new_dims = (int(scale * self.intermediate_image.shape[1]), 
                     int(scale * self.intermediate_image.shape[0]))
         
-        interp_method = cv2.INTER_CUBIC if scale < 1.0 else cv2.INTER_NEAREST
+        interp_method = cv2.INTER_LINEAR if scale < 1.0 else cv2.INTER_NEAREST
 
-        self.tk_image = cv2_to_tk(cv2.resize(self.intermediate_image, new_dims, interpolation=cv2.INTER_CUBIC))
+        self.tk_image = cv2_to_tk(cv2.resize(self.intermediate_image, new_dims, interpolation=interp_method))
 
         self._canvas_items[self._canvas_tag_image]["scale"] = scale
 
