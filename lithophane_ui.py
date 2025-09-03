@@ -322,6 +322,7 @@ class LithGUI:
 
         self._canvas_items[self._canvas_tag_rect]["corners"] = []
         self.draw_crop_corner_dots([x1, y1, x2, y2])
+        self._canvas_items[self._canvas_tag_rect]["crosshair"] = []
         self.draw_crop_center_crosshair([x1, y1, x2, y2])
             
     def draw_crop_corner_dots(self, coords, radius=3):
@@ -355,8 +356,23 @@ class LithGUI:
             else:
                 self.canvas.coords(f'c{i}', xx1, yy1, xx2, yy2)
 
-    def draw_crop_center_crosshair(self, coords):
-        pass
+    def draw_crop_center_crosshair(self, coords, radius=10):
+        x1, y1, x2, y2 = coords
+
+        xc = int(x1 + float(x2 - x1 + 1) / 2.0)
+        yc = int(y1 + float(y2 - y1 + 1) / 2.0)
+
+        xcm, xcp = max(xc - radius, x1), min(xc + radius, x2)
+        ycm, ycp = max(yc - radius, y1), min(yc + radius, y2)
+
+        if len(self._canvas_items[self._canvas_tag_rect]["crosshair"]) == 0:
+            self._canvas_items[self._canvas_tag_rect]["crosshair"].append(self.canvas.create_rectangle(xcm, ycm, xcp, ycp,
+                                                                                                       outline=self.CROP_COLOR,
+                                                                                                       fill=None,
+                                                                                                       width=1,
+                                                                                                       tags='crosshair'))
+        else:
+            self.canvas.coords('crosshair', xcm, ycm, xcp, ycp)
     
     def get_crop_bounding_box_update(self, start_x, start_y, dx, dy, location=None):
 
@@ -412,8 +428,10 @@ class LithGUI:
             self.active_item_loc = rectangle_location_flip_ids[self.active_item_loc]['y']
 
         # Alter the rectangle itself
-        self.canvas.coords(self._canvas_tag_rect, [x1, y1, x2, y2])
-        self.draw_crop_corner_dots([x1, y1, x2, y2])
+        coords = [x1, y1, x2, y2]
+        self.canvas.coords(self._canvas_tag_rect, coords)
+        self.draw_crop_corner_dots(coords)
+        self.draw_crop_center_crosshair(coords)
 
 
 
@@ -446,13 +464,15 @@ class LithGUI:
         
         side = np.argmin(edge_diff_abs)
         
-        # condition = (between_x or between_y) and edge_diff_abs[side] <= radius        
-        # return side + 4 if condition else -1
         if (between_x or between_y) and edge_diff_abs[side] <= radius:
             return RectLoc(side + 4)
         
 
-        center = [float(x2 - x2 + 1) / 2.0, float(y2 - y1 + 1) / 2.0]
+        center = [x1 + float(x2 - x1 + 1) / 2.0, y1 + float(y2 - y1 + 1) / 2.0]
+        dist = max(abs(x - center[0]), abs(y - center[1]))
+
+        if dist <= radius:
+            return RectLoc.CENTER
 
         return RectLoc.NULL
 
