@@ -438,31 +438,40 @@ class LithGUI:
         coords = np.array(self.canvas.coords(self._canvas_tag_rect))
         x1, y1, x2, y2 = coords
         x, y = start_x + dx, start_y + dy
-
         mouse_ref_pt = np.array([x, y])
-        axes = np.array([0, 1])
 
         # Handle constrained scaling operation
+        unconstrained_mask = np.ones(coords.shape, dtype=np.uint8)
+
         if location == RectLoc.TOP_LEFT:
-            origin = np.array([x2, y2])
+            unconstrained_mask[[2,3]] = 0
+            # origin = np.array([x2, y2])
         elif location == RectLoc.TOP_RIGHT:
-            origin = np.array([x1, y2])
+            unconstrained_mask[[0,3]] = 0
+            # origin = np.array([x1, y2])
         elif location == RectLoc.BOTTOM_LEFT:
-            origin = np.array([x2, y1])
+            unconstrained_mask[[1,2]] = 0
+            # origin = np.array([x2, y1])
         elif location == RectLoc.BOTTOM_RIGHT:
-            origin = np.array([x1, y1])
+            unconstrained_mask[[0,1]] = 0
+            # origin = np.array([x1, y1])
         elif location == RectLoc.TOP:
-            origin = np.array([y2])
-            axes = axes[1]
+            unconstrained_mask[[3]] = 0
+            # origin = np.array([y2])
+            # axes = axes[1]
         elif location == RectLoc.RIGHT:
-            origin = np.array([x1])
-            axes = axes[0]
+            unconstrained_mask[[0]] = 0
+            # origin = np.array([x1])
+            # axes = axes[0]
         elif location == RectLoc.BOTTOM:
-            origin = np.array([y1])
-            axes = axes[1]
+            unconstrained_mask[[1]] = 0
+            # origin = np.array([y1])
+            # axes = axes[1]
         elif location == RectLoc.LEFT:
-            origin = np.array([x2])
-            axes = axes[0]
+            unconstrained_mask[[2]] = 0
+            # origin = np.array([x2])
+            # axes = axes[0]
+
 
         
 
