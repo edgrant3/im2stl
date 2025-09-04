@@ -103,6 +103,9 @@ class LithGUI:
             offset_y = int(round((screen_h - self.root_h) / 2))
             self.root.geometry(f"{self.root_w}x{self.root_h}+{offset_x}+{offset_y}")
 
+        self.crop_width_mm = None
+        self.crop_height_mm = None
+
         self.image_path = None
         self.original_image = None # numpy.ndarray in BGR from cv2
         self.intermediate_image = None # numpy.ndarray in BGR from cv2
@@ -137,6 +140,13 @@ class LithGUI:
     def get_canvas_dims(self):
         return (self.canvas.winfo_width(), self.canvas.winfo_height())
     
+    def get_aspect_ratio(self):
+        if self.crop_width_mm and self.crop_height_mm:
+            return self.crop_width_mm / self.crop_height_mm
+        
+        x1, y1, x2, y2 = self.canvas.coords(self._canvas_tag_rect)
+        return float(x2 - x1 + 1) / float(y2 - y1 + 1)
+
     def create_widgets(self):
         self.create_canvas()
         self.create_control_panel()
@@ -270,10 +280,10 @@ class LithGUI:
         self.mm_H_entry.grid(row=1, column=1)
 
         # Add + Pack CheckBox for aspect ratio lock
-        self.ar_lock_val = tk.IntVar(value=1)
+        self.ar_lock = tk.IntVar(value=1)
         self.ar_lock_checkbox = tk.Checkbutton(self.control_panel, 
                                                text="Lock Aspect Ratio", 
-                                               variable=self.ar_lock_val, 
+                                               variable=self.ar_lock, 
                                                background=RGB2HEX((255,255,255)),
                                                onvalue=1, offvalue=0)
 
@@ -386,7 +396,7 @@ class LithGUI:
                                                                                                        tags='crosshair'))
         else:
             self.canvas.coords('crosshair', xcm, ycm, xcp, ycp)
-    
+
     def get_crop_bounding_box_update(self, start_x, start_y, dx, dy, location=None):
 
         if location is None:
@@ -412,6 +422,49 @@ class LithGUI:
             return [dx, 0, 0, 0]
         elif location == RectLoc.CENTER:
             return [dx, dy, dx, dy]
+        
+    def get_crop_bounding_box_update_ar_locked(self, start_x, start_y, dx, dy, location=None):
+
+        if location is None:
+            location = self.crop_box_location(start_x, start_y)
+
+        if location == RectLoc.NULL:
+            return [0, 0, 0, 0]
+        
+        if location == RectLoc.CENTER:
+            return [dx, dy, dx, dy]
+        
+        ar = self.get_aspect_ratio()
+        coords = np.array(self.canvas.coords(self._canvas_tag_rect))
+        x1, y1, x2, y2 = coords
+        x, y = start_x + dx, start_y + dy
+
+        mouse_ref_pt = np.array([x, y])
+        axes = np.array([0, 1])
+
+        # Handle constrained scaling operation
+        if location == RectLoc.TOP_LEFT:
+            origin = np.array([x2, y2])
+        elif location == RectLoc.TOP_RIGHT:
+            origin = np.array([x1, y2])
+        elif location == RectLoc.BOTTOM_LEFT:
+            origin = np.array([x2, y1])
+        elif location == RectLoc.BOTTOM_RIGHT:
+            origin = np.array([x1, y1])
+        elif location == RectLoc.TOP:
+            origin = np.array([y2])
+            axes = axes[1]
+        elif location == RectLoc.RIGHT:
+            origin = np.array([x1])
+            axes = axes[0]
+        elif location == RectLoc.BOTTOM:
+            origin = np.array([y1])
+            axes = axes[1]
+        elif location == RectLoc.LEFT:
+            origin = np.array([x2])
+            axes = axes[0]
+
+        
 
     def update_crop_rectangle_absolute(self, coords):
         self.canvas.coords(self._canvas_tag_rect, coords)
