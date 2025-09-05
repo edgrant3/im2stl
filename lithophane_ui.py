@@ -27,66 +27,79 @@ class RectLoc(Enum):
     LEFT = 7
     CENTER = 8
 
-rectangle_location_flip_ids = \
+rect_location_props = \
 {
     RectLoc.TOP_LEFT: {
-        'x'  : RectLoc.TOP_RIGHT,
-        'y'  : RectLoc.BOTTOM_LEFT
+        'flip_x': RectLoc.TOP_RIGHT,
+        'flip_y': RectLoc.BOTTOM_LEFT,
+        'cursor': "top_left_corner",
+        'coord_idx': np.array([0,1])
     },
 
     RectLoc.TOP_RIGHT: {
-        'x'  : RectLoc.TOP_LEFT,
-        'y'  : RectLoc.BOTTOM_RIGHT
+        'flip_x': RectLoc.TOP_LEFT,
+        'flip_y': RectLoc.BOTTOM_RIGHT,
+        'cursor': "top_right_corner",
+        'coord_idx': np.array([2,1])
     },
 
     RectLoc.BOTTOM_LEFT: {
-        'x'  : RectLoc.BOTTOM_RIGHT,
-        'y'  : RectLoc.TOP_LEFT
+        'flip_x': RectLoc.BOTTOM_RIGHT,
+        'flip_y': RectLoc.TOP_LEFT,
+        'cursor': "bottom_left_corner",
+        'coord_idx': np.array([0,3])
     },
 
     RectLoc.BOTTOM_RIGHT: {
-        'x'  : RectLoc.BOTTOM_LEFT,
-        'y'  : RectLoc.TOP_RIGHT
+        'flip_x': RectLoc.BOTTOM_LEFT,
+        'flip_y': RectLoc.TOP_RIGHT,
+        'cursor': "bottom_right_corner",
+        'coord_idx': np.array([2,3])
     },
 
     RectLoc.TOP: {
-        'x'  : RectLoc.TOP,
-        'y'  : RectLoc.BOTTOM
+        'flip_x': RectLoc.TOP,
+        'flip_y': RectLoc.BOTTOM,
+        'cursor': "bottom_side",
+        'coord_idx': np.array([1])
     },
 
     RectLoc.RIGHT: {
-        'x'  : RectLoc.LEFT,
-        'y'  : RectLoc.RIGHT
+        'flip_x': RectLoc.LEFT,
+        'flip_y': RectLoc.RIGHT,
+        'cursor': "left_side",
+        'coord_idx': np.array([2])
     },
 
     RectLoc.BOTTOM: {
-        'x'  : RectLoc.BOTTOM,
-        'y'  : RectLoc.TOP
+        'flip_x': RectLoc.BOTTOM,
+        'flip_y': RectLoc.TOP,
+        'cursor': "top_side",
+        'coord_idx': np.array([3])
     },
 
     RectLoc.LEFT: {
-        'x'  : RectLoc.RIGHT,
-        'y'  : RectLoc.LEFT
+        'flip_x': RectLoc.RIGHT,
+        'flip_y': RectLoc.LEFT,
+        'cursor': "right_side",
+        'coord_idx': np.array([0])
     },
 
     RectLoc.CENTER: {
-        'x'  : RectLoc.CENTER,
-        'y'  : RectLoc.CENTER
+        'flip_x': RectLoc.CENTER,
+        'flip_y': RectLoc.CENTER,
+        'cursor': "diamond_cross",
+        'coord_idx': np.array([0,1,2,3])
+    },
+
+    RectLoc.NULL: {
+        'flip_x': RectLoc.NULL,
+        'flip_y': RectLoc.NULL,
+        'cursor': None,
+        'coord_idx': None
     }
 }
 
-rectangle_location_coord_indices = \
-{
-    RectLoc.TOP_LEFT:     np.array([0,1]),
-    RectLoc.TOP_RIGHT:    np.array([2,1]),
-    RectLoc.BOTTOM_LEFT:  np.array([0,3]),
-    RectLoc.BOTTOM_RIGHT: np.array([2,3]),
-    RectLoc.TOP:          np.array([1]),
-    RectLoc.RIGHT:        np.array([2]),
-    RectLoc.BOTTOM:       np.array([3]),
-    RectLoc.LEFT:         np.array([0]),
-    RectLoc.CENTER:       np.array([0,1,2,3]),
-}
 
 class LithGUI:
     ALL_PADDING = 10
@@ -210,27 +223,10 @@ class LithGUI:
         # https://tkdocs.com/shipman/cursors.html
 
         loc = self.crop_box_location(event.x, event.y)
-        if loc == RectLoc.TOP_LEFT:
-            self.canvas.config(cursor="top_left_corner")            
-        elif loc == RectLoc.TOP_RIGHT:
-            self.canvas.config(cursor="top_right_corner")
-        elif loc == RectLoc.BOTTOM_LEFT:
-            self.canvas.config(cursor="bottom_left_corner")
-        elif loc == RectLoc.BOTTOM_RIGHT:
-            self.canvas.config(cursor="bottom_right_corner")
-        elif loc == RectLoc.TOP:
-            self.canvas.config(cursor="bottom_side")
-        elif loc == RectLoc.RIGHT:
-            self.canvas.config(cursor="left_side")
-        elif loc == RectLoc.BOTTOM:
-            self.canvas.config(cursor="top_side")
-        elif loc == RectLoc.LEFT:
-            self.canvas.config(cursor="right_side")
-        elif loc == RectLoc.CENTER:
-            self.canvas.config(cursor="diamond_cross")
-        else:
-            # Not interacting with crop window, revert to normal arrow
-            self.canvas.config(cursor=self.DEFAULT_CANVAS_CURSOR)
+        cursor = rect_location_props[loc]['cursor']
+        if cursor is None:
+            cursor = self.DEFAULT_CANVAS_CURSOR
+        self.canvas.config(cursor=cursor)
 
 
     def handle_canvas_click(self, event):
@@ -423,7 +419,7 @@ class LithGUI:
 
         coord_update = np.array([dx, dy, dx, dy])
         constrained = np.array([1,1,1,1])
-        constrained[rectangle_location_coord_indices[location]] = 0
+        constrained[rect_location_props[location]['coord_idx']] = 0
         coord_update[np.where(constrained)] = 0
         
         return coord_update
@@ -447,9 +443,9 @@ class LithGUI:
         constrained = np.zeros(coords.shape, dtype=np.uint8)
 
         # In this case, constrained edges are only those immediately opposite the selected edge/corner
-        location_opposite = rectangle_location_flip_ids[location]['x']
-        location_opposite = rectangle_location_flip_ids[location_opposite]['y']
-        opp_indices = rectangle_location_coord_indices[location_opposite]
+        location_opposite = rect_location_props[location]['flip_x']
+        location_opposite = rect_location_props[location_opposite]['flip_y']
+        opp_indices = rect_location_props[location_opposite]['coord_idx']
         constrained[opp_indices] = 1
 
         axis = np.array([0,1])
@@ -473,7 +469,7 @@ class LithGUI:
         coord_update = np.array([0,0,0,0])
         if np.sum(constrained) > 1:
             # Corner pull
-            free_indices = rectangle_location_coord_indices[location]
+            free_indices = rect_location_props[location]['coord_idx']
             coord_update[free_indices] = coords[opp_indices] + dims - coords[free_indices]
         else:
             # TODO: Edge pull 
@@ -512,11 +508,11 @@ class LithGUI:
 
         if x1 > x2:
             x1, x2 = x2, x1
-            self.active_item_loc = rectangle_location_flip_ids[self.active_item_loc]['x']
+            self.active_item_loc = rect_location_props[self.active_item_loc]['flip_x']
         
         if y1 > y2:
             y1, y2 = y2, y1
-            self.active_item_loc = rectangle_location_flip_ids[self.active_item_loc]['y']
+            self.active_item_loc = rect_location_props[self.active_item_loc]['flip_y']
 
         # Alter the rectangle itself
         coords = [x1, y1, x2, y2]
