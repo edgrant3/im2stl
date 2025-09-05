@@ -72,7 +72,20 @@ rectangle_location_flip_ids = \
     RectLoc.CENTER: {
         'x'  : RectLoc.CENTER,
         'y'  : RectLoc.CENTER
-    },
+    }
+}
+
+rectangle_location_coord_indices = \
+{
+    RectLoc.TOP_LEFT:     np.array([0,1]),
+    RectLoc.TOP_RIGHT:    np.array([2,1]),
+    RectLoc.BOTTOM_LEFT:  np.array([0,3]),
+    RectLoc.BOTTOM_RIGHT: np.array([2,3]),
+    RectLoc.TOP:          np.array([1]),
+    RectLoc.RIGHT:        np.array([2]),
+    RectLoc.BOTTOM:       np.array([3]),
+    RectLoc.LEFT:         np.array([0]),
+    RectLoc.CENTER:       np.array([0,1,2,3]),
 }
 
 class LithGUI:
@@ -144,8 +157,10 @@ class LithGUI:
         if self.crop_width_mm and self.crop_height_mm:
             return self.crop_width_mm / self.crop_height_mm
         
-        x1, y1, x2, y2 = self.canvas.coords(self._canvas_tag_rect)
-        return float(x2 - x1 + 1) / float(y2 - y1 + 1)
+        # x1, y1, x2, y2 = self.canvas.coords(self._canvas_tag_image)
+        # result = float(x2 - x1 + 1) / float(y2 - y1 + 1)
+        result = self.tk_image.width() / self.tk_image.height()
+        return result
 
     def create_widgets(self):
         self.create_canvas()
@@ -250,7 +265,11 @@ class LithGUI:
         if self.active_item_tag == self._canvas_tag_image:
             self.move_canvas_image(dx, dy)
         elif self.active_item_tag == self._canvas_tag_rect:
-            delta_coords = self.get_crop_bounding_box_update(start_x, start_y, dx, dy, location=self.active_item_loc)    
+            if self.ar_lock.get():
+                delta_coords = self.get_crop_bounding_box_update_ar_locked(start_x, start_y, dx, dy, location=self.active_item_loc) 
+            else:
+                delta_coords = self.get_crop_bounding_box_update(start_x, start_y, dx, dy, location=self.active_item_loc)
+
             self.update_crop_rectangle_relative(delta_coords)
         else:
             self.canvas.move(self.active_item_tag, dx, dy)
@@ -402,26 +421,12 @@ class LithGUI:
         if location is None:
             location = self.crop_box_location(start_x, start_y)
 
-        if location == RectLoc.NULL:
-            return [0, 0, 0, 0]        
-        elif location == RectLoc.TOP_LEFT:
-            return [dx, dy, 0, 0]
-        elif location == RectLoc.TOP_RIGHT:
-            return [0, dy, dx, 0]
-        elif location == RectLoc.BOTTOM_LEFT:
-            return [dx, 0, 0, dy]
-        elif location == RectLoc.BOTTOM_RIGHT:
-            return [0, 0, dx, dy]
-        elif location == RectLoc.TOP:
-            return [0, dy, 0, 0]
-        elif location == RectLoc.RIGHT:
-            return [0, 0, dx, 0]
-        elif location == RectLoc.BOTTOM:
-            return [0, 0, 0, dy]
-        elif location == RectLoc.LEFT:
-            return [dx, 0, 0, 0]
-        elif location == RectLoc.CENTER:
-            return [dx, dy, dx, dy]
+        coord_update = np.array([dx, dy, dx, dy])
+        constrained = np.array([1,1,1,1])
+        constrained[rectangle_location_coord_indices[location]] = 0
+        coord_update[np.where(constrained)] = 0
+        
+        return coord_update
         
     def get_crop_bounding_box_update_ar_locked(self, start_x, start_y, dx, dy, location=None):
 
@@ -436,44 +441,47 @@ class LithGUI:
         
         ar = self.get_aspect_ratio()
         coords = np.array(self.canvas.coords(self._canvas_tag_rect))
-        x1, y1, x2, y2 = coords
-        x, y = start_x + dx, start_y + dy
-        mouse_ref_pt = np.array([x, y])
+        mouse_ref_pt = np.array([start_x + dx, start_y + dy])
 
-        # Handle constrained scaling operation
-        unconstrained_mask = np.ones(coords.shape, dtype=np.uint8)
+        # Create mask for constrained edges of the rectangle
+        constrained = np.zeros(coords.shape, dtype=np.uint8)
 
-        if location == RectLoc.TOP_LEFT:
-            unconstrained_mask[[2,3]] = 0
-            # origin = np.array([x2, y2])
-        elif location == RectLoc.TOP_RIGHT:
-            unconstrained_mask[[0,3]] = 0
-            # origin = np.array([x1, y2])
-        elif location == RectLoc.BOTTOM_LEFT:
-            unconstrained_mask[[1,2]] = 0
-            # origin = np.array([x2, y1])
-        elif location == RectLoc.BOTTOM_RIGHT:
-            unconstrained_mask[[0,1]] = 0
-            # origin = np.array([x1, y1])
-        elif location == RectLoc.TOP:
-            unconstrained_mask[[3]] = 0
-            # origin = np.array([y2])
-            # axes = axes[1]
-        elif location == RectLoc.RIGHT:
-            unconstrained_mask[[0]] = 0
-            # origin = np.array([x1])
-            # axes = axes[0]
-        elif location == RectLoc.BOTTOM:
-            unconstrained_mask[[1]] = 0
-            # origin = np.array([y1])
-            # axes = axes[1]
-        elif location == RectLoc.LEFT:
-            unconstrained_mask[[2]] = 0
-            # origin = np.array([x2])
-            # axes = axes[0]
+        # In this case, constrained edges are only those immediately opposite the selected edge/corner
+        location_opposite = rectangle_location_flip_ids[location]['x']
+        location_opposite = rectangle_location_flip_ids[location_opposite]['y']
+        opp_indices = rectangle_location_coord_indices[location_opposite]
+        constrained[opp_indices] = 1
+
+        axis = np.array([0,1])
+        axis = axis[np.logical_or(constrained[:2], constrained[2:])]
+
+        dist = mouse_ref_pt[axis] - coords[opp_indices]
+        sign = np.sign(dist)
+
+        if len(dist) > 1:
+            bounds_ar = abs(dist[0] / dist[1])
+            # If wider aspect ratio, constrain scaling by height - & vice versa
+            axis = 1 * (bounds_ar >= ar)
+            dist = dist[axis]
+
+        # Dist is now scalar. Time to compute integer dimensions of resulting rectangle
+        dims = np.array([0, 0])
+        dims[axis] = dist
+        dims[1-axis] = sign[1-axis] * (round(abs(dist * ar)) if axis == 1 else round(abs(dist / ar)))
+
+        # Now calculate updated coords that adhere to the side or corner constraints
+        coord_update = np.array([0,0,0,0])
+        if np.sum(constrained) > 1:
+            # Corner pull
+            free_indices = rectangle_location_coord_indices[location]
+            coord_update[free_indices] = coords[opp_indices] + dims - coords[free_indices]
+        else:
+            # TODO: Edge pull 
+            pass
+
+        return coord_update
 
 
-        
 
     def update_crop_rectangle_absolute(self, coords):
         self.canvas.coords(self._canvas_tag_rect, coords)
@@ -487,10 +495,14 @@ class LithGUI:
         # Handle out-of-canvas-bounds move
         x_res = [x1+dx1, x2+dx2]
         if (x_res[0] < 0) or (x_res[1] >= self.get_canvas_dims()[0]):
+            if self.ar_lock.get():
+                return
             dx1, dx2 = 0, 0
 
         y_res = [y1+dy1, y2+dy2]
         if (y_res[0] < 0) or (y_res[1] >= self.get_canvas_dims()[1]):
+            if self.ar_lock.get():
+                return
             dy1, dy2 = 0, 0
 
         x1 += dx1
@@ -599,12 +611,6 @@ class LithGUI:
             dx = 0
         if np.floor(curr_pos[1] + dy) < - h // 2 or np.ceil(curr_pos[1] + dy) > h_c + h // 2:
             dy = 0
-
-        # if curr_pos[0] + dx < 0 or curr_pos[0] + dx >= w_c:
-        #     dx = 0
-
-        # if curr_pos[1] + dy < 0 or curr_pos[1] + dy >= h_c:
-        #     dy = 0
 
         self.canvas.move(self._canvas_tag_image, dx, dy)
         self._canvas_items[self._canvas_tag_image]["pos"][0] += dx
