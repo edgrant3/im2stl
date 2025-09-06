@@ -1,5 +1,6 @@
 import tkinter as tk
 import cv2
+import re
 import numpy as np
 from enum import Enum
 from tkinter import N, S, E, W
@@ -113,7 +114,7 @@ class LithGUI:
 
     def __init__(self, fullscreen=False):
         self.root = tk.Tk()
-        self.root.title("Crop Image")
+        self.root.title("Lithophane Generator")
         self.root.focus_force()
 
         self.root.columnconfigure(0, weight=1)
@@ -182,8 +183,10 @@ class LithGUI:
         control_panel_cols = 2
 
         # Add + Pack entry fields for crop W and H in mm and corresponding labels
-        self.mm_W_entry = tk.Entry(self.control_panel, borderwidth=3)
-        self.mm_H_entry = tk.Entry(self.control_panel, borderwidth=3)
+        self.mm_W_entry_str = tk.StringVar()
+        self.mm_H_entry_str = tk.StringVar()
+        self.mm_W_entry = tk.Entry(self.control_panel, borderwidth=3, textvariable=self.mm_W_entry_str)
+        self.mm_H_entry = tk.Entry(self.control_panel, borderwidth=3, textvariable=self.mm_H_entry_str)
         mm_W_entry_label = tk.Label(self.control_panel, text="Width (mm)")
         mm_H_entry_label = tk.Label(self.control_panel, text="Height (mm)")
 
@@ -250,6 +253,28 @@ class LithGUI:
         # Bind reset crop rectangle to canvas image corner coords
         self.root.bind("<r>", lambda event: self.fit_crop_to_image())
 
+        # Bind update of entry field string variables
+        self.mm_W_entry.bind("<Return>", lambda event: self.handle_sizing_entry_write('w'))
+        self.mm_H_entry.bind("<Return>", lambda event: self.handle_sizing_entry_write('h'))
+        # self.mm_W_entry_str.trace_add('write', lambda name, index, mode : self.handle_sizing_entry_write('w'))
+        # self.mm_H_entry_str.trace_add('write', lambda name, index, mode : self.handle_sizing_entry_write('h'))
+
+    def handle_sizing_entry_write(self, dim):
+        idx = 0 + 1 * (dim == 'h')
+        txt = [self.mm_W_entry_str.get(),
+               self.mm_H_entry_str.get()]
+        
+        numeric = re.findall(r"[-+]?\d*\.?\d+", txt[idx])
+        if len(numeric) == 0:
+            return        
+
+        if idx == 0:
+            self.crop_width_mm = float(numeric[0])
+        else:
+            self.crop_height_mm = float(numeric[0])
+
+        self.update_crop_aspect_ratio()
+
     def mark_setup_complete(self):
         self.setup_is_complete = True
 
@@ -262,14 +287,15 @@ class LithGUI:
     def get_canvas_dims(self):
         return (self.canvas.winfo_width(), self.canvas.winfo_height())
     
-    def get_aspect_ratio(self):
+    def get_aspect_ratio(self):        
         if self.crop_width_mm and self.crop_height_mm:
             return self.crop_width_mm / self.crop_height_mm
         
         # x1, y1, x2, y2 = self.canvas.coords(self._canvas_tag_image)
         # result = float(x2 - x1 + 1) / float(y2 - y1 + 1)
-        result = self.tk_image.width() / self.tk_image.height()
-        return result
+        # result = self.tk_image.width() / self.tk_image.height()
+        # result = self.crop_width_mm / self.crop_height_mm
+        # return result
 
     def handle_resize(self, event):
         if self.setup_is_complete:
@@ -492,7 +518,37 @@ class LithGUI:
 
         return coord_update
 
+    def update_entry_text(self):
+        self.mm_W_entry.insert(0, f'{self.crop_width_mm:.2f}mm')
+        self.mm_H_entry.insert(0, f'{self.crop_height_mm:.2f}mm')
+
+    def update_crop_aspect_ratio(self, ar=None, dim=None):
+        if ar is None:
+            ar = self.get_aspect_ratio()
+
+        coords = self.canvas.coords(self._canvas_tag_rect)
+        x1, y1, x2, y2 = coords
+        w, h = (x2 - x1), (y2 - y1)
+        curr_ar = w / h
+
+        v = ar / curr_ar
+
+        # If dim is None, subtract and add equal magnitude from each edge
+        delta = (h * w * (1 - v)) / (h + v * w)
+        inc = round(delta / 2.0)
+        new_coords = np.array([inc, -inc, -inc, inc]) + np.array(coords)
+
+        # If dim is 0, hold height constant and only adjust width
+        # If dim is 1, hodl width constant and only adjust height
+
+        # If, for any dim, the size of the resulting rectangle exceeds canvas bounds,
+        # then scale uniformly down until within bounds
+        self.update_crop_rectangle_absolute([a for a in new_coords])
+
+
+
     def update_crop_rectangle_absolute(self, coords):
+        coords = self.constrain_coords_to_canvas(coords)
         self.canvas.coords(self._canvas_tag_rect, coords)
         self.draw_crop_corner_dots(coords)
         self.draw_crop_center_crosshair(coords)
@@ -592,6 +648,11 @@ class LithGUI:
 
         self.create_crop_rectangle()
 
+        self.crop_height_mm, self.crop_width_mm = self.original_image.shape[:2]
+        self.crop_height_mm /= self.DPMM
+        self.crop_width_mm  /= self.DPMM
+        self.update_entry_text()
+
     def create_canvas_image(self, centered=True):
         self.canvas.delete(self._canvas_tag_image)
 
@@ -647,6 +708,17 @@ class LithGUI:
         self.canvas.itemconfig(self._canvas_tag_image, image=self.tk_image)
         self.canvas.image = self.tk_image
 
+    def constrain_coords_to_canvas(self, coords):
+
+        w_c, h_c = self.get_canvas_dims()
+
+        coords[0] = max(0, coords[0])
+        coords[1] = max(0, coords[1])
+        coords[2] = min(w_c-1, coords[2])
+        coords[3] = min(h_c-1, coords[3])
+
+        return coords
+
     def fit_crop_to_image(self):
         coords = [x for x in self.canvas.bbox(self._canvas_tag_image)]
         coords[2] -= 1
@@ -659,7 +731,7 @@ class LithGUI:
         w, h = float(self.intermediate_image.shape[1]), float(self.intermediate_image.shape[0])
 
         if not ((w > w_c) or (h > h_c)):
-            return
+            return 1.0
                 
         sf = min((w_c / w), (h_c / h))
         self.tk_image = cv2_to_tk(cv2.resize(self.intermediate_image, (int(w * sf), int(h * sf)), interpolation=cv2.INTER_CUBIC))
