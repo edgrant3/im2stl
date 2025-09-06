@@ -5,3 +5,4 @@
 venv*
 /*.3mf
 /*.stl
+assets/
