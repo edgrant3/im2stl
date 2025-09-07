@@ -7,20 +7,7 @@ from tkinter import N, S, E, W
 from tkinter import filedialog
 from PIL import Image, ImageTk
 
-def RGB2HEX(rgbcol):
-    return '#%02x%02x%02x' % rgbcol
-
-def cv2_to_tk(bgr_img):
-    # 1) Convert from BGR to RGB color
-    # 2) Convert from RGB np.ndarray to PIL Image
-    # 3) Convert PIL Image to ImageTk PhtoImage
-    return ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)))
-
-def convert_numeric_string(str):
-    numeric = re.findall(r"[-+]?\d*\.?\d+", str)
-    if len(numeric) == 0:
-        return None    
-    return float(numeric[0])
+from utils import rgb2hex, cv2_to_tk, convert_numeric_string
 
 class RectLoc(Enum):
     NULL = -1
@@ -33,8 +20,6 @@ class RectLoc(Enum):
     BOTTOM = 6
     LEFT = 7
     CENTER = 8
-
-
 
 rect_location_props = \
 {
@@ -113,8 +98,8 @@ rect_location_props = \
 class LithGUI:
     ALL_PADDING = 10
     CONTROL_PANEL_WIDTH = 0.2
-    CANVAS_COLOR = RGB2HEX((127, 127, 127))
-    CROP_COLOR = RGB2HEX((255, 0, 0))
+    CANVAS_COLOR = rgb2hex((127, 127, 127))
+    CROP_COLOR = rgb2hex((255, 0, 0))
     LARGE_PX_INCREMENT = 10
     SMALL_PX_INCREMENT = 1
     DEFAULT_CANVAS_CURSOR = "fleur"
@@ -208,7 +193,7 @@ class LithGUI:
         self.ar_lock_checkbox = tk.Checkbutton(self.control_panel, 
                                                text="Lock Aspect Ratio", 
                                                variable=self.ar_lock, 
-                                               background=RGB2HEX((255,255,255)),
+                                               background=rgb2hex((255,255,255)),
                                                onvalue=1, offvalue=0)
 
         self.ar_lock_checkbox.grid(row=2, column=0, columnspan=control_panel_cols, sticky=W)
@@ -542,24 +527,24 @@ class LithGUI:
             # Subtract and add equal magnitude from each edge
             delta = (h * w * (1 - v)) / (h + v * w)
             inc = round(delta / 2.0)
-            new_coords = np.array([inc, -inc, -inc, inc]) + np.array(coords)
+            new_coords = [inc, -inc, -inc, inc]
 
         elif dim == 'w':
             # Hold height constant and only adjust width
             new_w = h * ar
             inc = round((new_w - w) / 2.0)
-            new_coords = np.array([-inc, 0, inc, 0]) + np.array(coords)
+            new_coords = [-inc, 0, inc, 0]
 
         elif dim == 'h':
             # Hold width constant and only adjust height
             new_h = w / ar
             inc = round((new_h - h) / 2.0)
-            new_coords = np.array([0, -inc, 0, inc]) + np.array(coords)
+            new_coords = [0, -inc, 0, inc]
 
 
         # If, for any dim, the size of the resulting rectangle exceeds canvas bounds,
         # then scale uniformly down until within bounds
-        self.update_crop_rectangle_absolute([a for a in new_coords])
+        self.update_crop_rectangle_relative(new_coords)
 
     def update_crop_rectangle_absolute(self, coords):
         coords = self.constrain_coords_to_canvas(coords)
@@ -737,6 +722,7 @@ class LithGUI:
         coords = [x for x in self.canvas.bbox(self._canvas_tag_image)]
         coords[2] -= 1
         coords[3] -= 1
+        coords = self.constrain_coords_to_canvas(coords)
 
         old_coords = self.canvas.coords(self._canvas_tag_rect)
         self.update_entries_from_new_crop(old_coords, coords)
@@ -744,16 +730,11 @@ class LithGUI:
 
     def update_entries_from_new_crop(self, old_coords, new_coords):
         entry_w = convert_numeric_string(self.mm_W_entry_str.get())
-        entry_h = convert_numeric_string(self.mm_H_entry_str.get())
-
-        
+        entry_h = convert_numeric_string(self.mm_H_entry_str.get())        
 
         old_w, old_h = (old_coords[2]- old_coords[0] + 1), (old_coords[3]- old_coords[1] + 1)
         new_w, new_h = (new_coords[2]- new_coords[0] + 1), (new_coords[3]- new_coords[1] + 1)
         scale = [new_w / old_w, new_h / old_h]
-
-        print(entry_w, self.crop_width_mm, scale[0])
-        print(type(entry_w), type(self.crop_width_mm), type(scale[0]))
 
         self.crop_width_mm  = entry_w * scale[0]
         self.crop_height_mm = entry_h * scale[1]

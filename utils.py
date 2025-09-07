@@ -1,9 +1,11 @@
 import cv2
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 import lib3mf
 import struct
 from stl import mesh
+from PIL import Image, ImageTk
 
 def write_binary_stl(filename, facets):
     
@@ -217,3 +219,18 @@ class STL_Tri:
     def zero_area(self):
         return self.__zero_area if self.__zero_area is not None else self.compute_area() == 0.0
     
+
+def rgb2hex(rgbcol):
+    return '#%02x%02x%02x' % rgbcol
+
+def cv2_to_tk(bgr_img):
+    # 1) Convert from BGR to RGB color
+    # 2) Convert from RGB np.ndarray to PIL Image
+    # 3) Convert PIL Image to ImageTk PhtoImage
+    return ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)))
+
+def convert_numeric_string(str):
+    numeric = re.findall(r"[-+]?\d*\.?\d+", str)
+    if len(numeric) == 0:
+        return None    
+    return float(numeric[0])
