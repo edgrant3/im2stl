@@ -16,6 +16,12 @@ def cv2_to_tk(bgr_img):
     # 3) Convert PIL Image to ImageTk PhtoImage
     return ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)))
 
+def convert_numeric_string(str):
+    numeric = re.findall(r"[-+]?\d*\.?\d+", str)
+    if len(numeric) == 0:
+        return None    
+    return float(numeric[0])
+
 class RectLoc(Enum):
     NULL = -1
     TOP_LEFT = 0
@@ -27,6 +33,8 @@ class RectLoc(Enum):
     BOTTOM = 6
     LEFT = 7
     CENTER = 8
+
+
 
 rect_location_props = \
 {
@@ -264,16 +272,17 @@ class LithGUI:
         txt = [self.mm_W_entry_str.get(),
                self.mm_H_entry_str.get()]
         
-        numeric = re.findall(r"[-+]?\d*\.?\d+", txt[idx])
-        if len(numeric) == 0:
-            return        
-
+        # numeric = re.findall(r"[-+]?\d*\.?\d+", txt[idx])
+        numeric = convert_numeric_string(txt[idx])
+        if numeric is None:
+            return
+        
         if idx == 0:
-            self.crop_width_mm = float(numeric[0])
+            self.crop_width_mm = float(numeric)
         else:
-            self.crop_height_mm = float(numeric[0])
+            self.crop_height_mm = float(numeric)
 
-        self.update_crop_aspect_ratio()
+        self.update_crop_aspect_ratio(dim=dim)
 
     def mark_setup_complete(self):
         self.setup_is_complete = True
@@ -290,12 +299,6 @@ class LithGUI:
     def get_aspect_ratio(self):        
         if self.crop_width_mm and self.crop_height_mm:
             return self.crop_width_mm / self.crop_height_mm
-        
-        # x1, y1, x2, y2 = self.canvas.coords(self._canvas_tag_image)
-        # result = float(x2 - x1 + 1) / float(y2 - y1 + 1)
-        # result = self.tk_image.width() / self.tk_image.height()
-        # result = self.crop_width_mm / self.crop_height_mm
-        # return result
 
     def handle_resize(self, event):
         if self.setup_is_complete:
@@ -519,6 +522,8 @@ class LithGUI:
         return coord_update
 
     def update_entry_text(self):
+        self.mm_W_entry.delete(0, tk.END)  # Delete all existing text
+        self.mm_H_entry.delete(0, tk.END)  # Delete all existing text
         self.mm_W_entry.insert(0, f'{self.crop_width_mm:.2f}mm')
         self.mm_H_entry.insert(0, f'{self.crop_height_mm:.2f}mm')
 
@@ -533,19 +538,28 @@ class LithGUI:
 
         v = ar / curr_ar
 
-        # If dim is None, subtract and add equal magnitude from each edge
-        delta = (h * w * (1 - v)) / (h + v * w)
-        inc = round(delta / 2.0)
-        new_coords = np.array([inc, -inc, -inc, inc]) + np.array(coords)
+        if dim is None:
+            # Subtract and add equal magnitude from each edge
+            delta = (h * w * (1 - v)) / (h + v * w)
+            inc = round(delta / 2.0)
+            new_coords = np.array([inc, -inc, -inc, inc]) + np.array(coords)
 
-        # If dim is 0, hold height constant and only adjust width
-        # If dim is 1, hodl width constant and only adjust height
+        elif dim == 'w':
+            # Hold height constant and only adjust width
+            new_w = h * ar
+            inc = round((new_w - w) / 2.0)
+            new_coords = np.array([-inc, 0, inc, 0]) + np.array(coords)
+
+        elif dim == 'h':
+            # Hold width constant and only adjust height
+            new_h = w / ar
+            inc = round((new_h - h) / 2.0)
+            new_coords = np.array([0, -inc, 0, inc]) + np.array(coords)
+
 
         # If, for any dim, the size of the resulting rectangle exceeds canvas bounds,
         # then scale uniformly down until within bounds
         self.update_crop_rectangle_absolute([a for a in new_coords])
-
-
 
     def update_crop_rectangle_absolute(self, coords):
         coords = self.constrain_coords_to_canvas(coords)
@@ -723,7 +737,28 @@ class LithGUI:
         coords = [x for x in self.canvas.bbox(self._canvas_tag_image)]
         coords[2] -= 1
         coords[3] -= 1
+
+        old_coords = self.canvas.coords(self._canvas_tag_rect)
+        self.update_entries_from_new_crop(old_coords, coords)
         self.update_crop_rectangle_absolute(coords)
+
+    def update_entries_from_new_crop(self, old_coords, new_coords):
+        entry_w = convert_numeric_string(self.mm_W_entry_str.get())
+        entry_h = convert_numeric_string(self.mm_H_entry_str.get())
+
+        
+
+        old_w, old_h = (old_coords[2]- old_coords[0] + 1), (old_coords[3]- old_coords[1] + 1)
+        new_w, new_h = (new_coords[2]- new_coords[0] + 1), (new_coords[3]- new_coords[1] + 1)
+        scale = [new_w / old_w, new_h / old_h]
+
+        print(entry_w, self.crop_width_mm, scale[0])
+        print(type(entry_w), type(self.crop_width_mm), type(scale[0]))
+
+        self.crop_width_mm  = entry_w * scale[0]
+        self.crop_height_mm = entry_h * scale[1]
+
+        self.update_entry_text()
 
     def fit_image_to_canvas(self):
         w_c, h_c = self.get_canvas_dims()
