@@ -195,25 +195,34 @@ class LithGUI:
                                                variable=self.ar_lock, 
                                                background=rgb2hex((255,255,255)),
                                                onvalue=1, offvalue=0)
+        
+        # Add checkbox to lock pixel-millimeter correspondence
+        self.px_mm_lock = tk.IntVar(value=1)
+        self.px_mm_lock_checkbox = tk.Checkbutton(self.control_panel,
+                                                  text="Lock Pixel-to-mm sizing",
+                                                  variable=self.px_mm_lock,
+                                                  background=rgb2hex((255,255,255)),
+                                                  onvalue=1, offvalue=0)
 
         self.ar_lock_checkbox.grid(row=2, column=0, columnspan=control_panel_cols, sticky=W)
+        self.px_mm_lock_checkbox.grid(row=3, column=0, columnspan=control_panel_cols, sticky=W)
 
         # Add + Pack Entry, Label, and Text note for pixel_size in mm
         self.pixel_size_entry = tk.Entry(self.control_panel, borderwidth=3)
         pixel_size_entry_label = tk.Label(self.control_panel, text="Pixel Size (mm)")
-        pixel_size_entry_label.grid(row=3, column=0, sticky=W)
-        self.pixel_size_entry.grid(row=4, column=0)
+        pixel_size_entry_label.grid(row=4, column=0, sticky=W)
+        self.pixel_size_entry.grid(row=5, column=0, sticky=N+W)
 
         pixel_size_entry_text_note = tk.Text(self.control_panel)
         pixel_size_note = 'Setting "Pixel Size" will downsample the source image to save memory and expedite mesh generation.\n\n' + \
         'There is no need to have a finer pixel resolution than a 3D printer can achieve (i.e. pixel size should roughly match 3D printer nozzle diameter)'
         pixel_size_entry_text_note.insert(tk.END, pixel_size_note)
         self.control_panel.grid_rowconfigure(5, weight=1)
-        pixel_size_entry_text_note.grid(row=5, column=0, sticky=N+S+E+W, columnspan=control_panel_cols)
+        pixel_size_entry_text_note.grid(row=6, column=0, sticky=N+S+E+W, columnspan=control_panel_cols)
 
         # Add + Pack image loading button
         self.load_img_button = tk.Button(self.control_panel, command=self.load_image, text="Load Image")
-        self.load_img_button.grid(row=6, column=0, sticky=S)
+        self.load_img_button.grid(row=7, column=0, sticky=S)
 
     def arrange_widgets(self):
         self.control_panel.grid(row=0, column=0, padx=self.ALL_PADDING, pady=self.ALL_PADDING, sticky=N+S+E+W)
@@ -548,12 +557,18 @@ class LithGUI:
 
     def update_crop_rectangle_absolute(self, coords):
         coords = self.constrain_coords_to_canvas(coords)
+
+        if self.px_mm_lock.get():
+            old_coords = self.canvas.coords(self._canvas_tag_rect)
+            self.update_entries_from_new_crop(old_coords, coords)
+
         self.canvas.coords(self._canvas_tag_rect, coords)
         self.draw_crop_corner_dots(coords)
         self.draw_crop_center_crosshair(coords)
 
     def update_crop_rectangle_relative(self, delta_coords):
-        x1, y1, x2, y2 = self.canvas.coords(self._canvas_tag_rect)
+        old_coords = self.canvas.coords(self._canvas_tag_rect)
+        x1, y1, x2, y2 = old_coords
         dx1, dy1, dx2, dy2 = delta_coords
 
         # Handle out-of-canvas-bounds move
@@ -584,6 +599,10 @@ class LithGUI:
 
         # Alter the rectangle itself
         coords = [x1, y1, x2, y2]
+
+        if self.px_mm_lock.get():
+            self.update_entries_from_new_crop(old_coords, coords)
+
         self.canvas.coords(self._canvas_tag_rect, coords)
         self.draw_crop_corner_dots(coords)
         self.draw_crop_center_crosshair(coords)
