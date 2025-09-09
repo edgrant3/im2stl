@@ -746,10 +746,12 @@ class LithGUI:
         coords = [x for x in self.canvas.bbox(self._canvas_tag_image)]
         coords[2] -= 1
         coords[3] -= 1
-        coords = self.constrain_coords_to_canvas(coords)
-        
+
+        ar_lock_status = self.ar_lock.get()
+        self.ar_lock.set(0)
         self.update_crop_rectangle_absolute(coords)
         self.recompute_mm_dimensions()
+        self.ar_lock.set(ar_lock_status)
 
     def recompute_mm_dimensions(self):              
         # Refresh the pixel-to-millimeter correspondence in the crop window
