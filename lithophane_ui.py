@@ -103,7 +103,7 @@ class LithGUI:
     LARGE_PX_INCREMENT = 10
     SMALL_PX_INCREMENT = 1
     DEFAULT_CANVAS_CURSOR = "fleur"
-    DPMM = 12 # default pixels per millimeter
+    PX_PER_MM_DEFAULT = 12 # default pixels per millimeter
 
     def __init__(self, fullscreen=False):
         self.root = tk.Tk()
@@ -126,6 +126,7 @@ class LithGUI:
 
         self.crop_width_mm = None
         self.crop_height_mm = None
+        self.pixels_per_mm = self.PX_PER_MM_DEFAULT
 
         self.image_path = None
         self.original_image = None # numpy.ndarray in BGR from cv2
@@ -183,10 +184,14 @@ class LithGUI:
         mm_W_entry_label = tk.Label(self.control_panel, text="Width (mm)")
         mm_H_entry_label = tk.Label(self.control_panel, text="Height (mm)")
 
-        mm_W_entry_label.grid(row=0, column=0, sticky=W, padx=self.ALL_PADDING)
-        mm_H_entry_label.grid(row=0, column=1, sticky=W, padx=self.ALL_PADDING)
-        self.mm_W_entry.grid(row=1, column=0)
-        self.mm_H_entry.grid(row=1, column=1)
+        r = 0
+        mm_W_entry_label.grid(row=r, column=0, sticky=W, padx=self.ALL_PADDING)
+        mm_H_entry_label.grid(row=r, column=1, sticky=W, padx=self.ALL_PADDING)
+        r += 1
+
+        self.mm_W_entry.grid(row=r, column=0)
+        self.mm_H_entry.grid(row=r, column=1)
+        r += 1
 
         # Add + Pack CheckBox for aspect ratio lock
         self.ar_lock = tk.IntVar(value=1)
@@ -195,34 +200,40 @@ class LithGUI:
                                                variable=self.ar_lock, 
                                                background=rgb2hex((255,255,255)),
                                                onvalue=1, offvalue=0)
-        
-        # Add checkbox to lock pixel-millimeter correspondence
-        self.px_mm_lock = tk.IntVar(value=1)
-        self.px_mm_lock_checkbox = tk.Checkbutton(self.control_panel,
-                                                  text="Lock Pixel-to-mm sizing",
-                                                  variable=self.px_mm_lock,
-                                                  background=rgb2hex((255,255,255)),
-                                                  onvalue=1, offvalue=0)
+        self.ar_lock_checkbox.grid(row=r, column=0, columnspan=control_panel_cols, sticky=W)
+        r += 1
 
-        self.ar_lock_checkbox.grid(row=2, column=0, columnspan=control_panel_cols, sticky=W)
-        self.px_mm_lock_checkbox.grid(row=3, column=0, columnspan=control_panel_cols, sticky=W)
+        # Add checkbox to lock pixel-millimeter correspondence
+        # self.px_mm_lock = tk.IntVar(value=1)
+        # self.px_mm_lock_checkbox = tk.Checkbutton(self.control_panel,
+        #                                           text="Lock Pixel-to-mm sizing",
+        #                                           variable=self.px_mm_lock,
+        #                                           background=rgb2hex((255,255,255)),
+        #                                           onvalue=1, offvalue=0)
+        
+
+        # self.px_mm_lock_checkbox.grid(row=r, column=0, columnspan=control_panel_cols, sticky=W)
+        # r += 1
 
         # Add + Pack Entry, Label, and Text note for pixel_size in mm
         self.pixel_size_entry = tk.Entry(self.control_panel, borderwidth=3)
         pixel_size_entry_label = tk.Label(self.control_panel, text="Pixel Size (mm)")
-        pixel_size_entry_label.grid(row=4, column=0, sticky=W)
-        self.pixel_size_entry.grid(row=5, column=0, sticky=N+W)
+        pixel_size_entry_label.grid(row=r, column=0, sticky=W)
+        r += 1
+        self.pixel_size_entry.grid(row=r, column=0, sticky=N+W)
+        r += 1
 
         pixel_size_entry_text_note = tk.Text(self.control_panel)
         pixel_size_note = 'Setting "Pixel Size" will downsample the source image to save memory and expedite mesh generation.\n\n' + \
         'There is no need to have a finer pixel resolution than a 3D printer can achieve (i.e. pixel size should roughly match 3D printer nozzle diameter)'
         pixel_size_entry_text_note.insert(tk.END, pixel_size_note)
-        self.control_panel.grid_rowconfigure(5, weight=1)
-        pixel_size_entry_text_note.grid(row=6, column=0, sticky=N+S+E+W, columnspan=control_panel_cols)
+        self.control_panel.grid_rowconfigure(r, weight=1)
+        pixel_size_entry_text_note.grid(row=r, column=0, sticky=N+S+E+W, columnspan=control_panel_cols)
+        r += 1
 
         # Add + Pack image loading button
         self.load_img_button = tk.Button(self.control_panel, command=self.load_image, text="Load Image")
-        self.load_img_button.grid(row=7, column=0, sticky=S)
+        self.load_img_button.grid(row=r, column=0, sticky=S)
 
     def arrange_widgets(self):
         self.control_panel.grid(row=0, column=0, padx=self.ALL_PADDING, pady=self.ALL_PADDING, sticky=N+S+E+W)
@@ -278,6 +289,9 @@ class LithGUI:
 
         self.update_crop_aspect_ratio(dim=dim)
 
+        if self.ar_lock.get():
+            self.compute_pixels_per_mm()
+
     def mark_setup_complete(self):
         self.setup_is_complete = True
 
@@ -295,11 +309,9 @@ class LithGUI:
             return self.crop_width_mm / self.crop_height_mm
 
     def handle_resize(self, event):
+        # TODO: Implement graceful window resizing
         if self.setup_is_complete:
-            return
-            print(f'resizing to: {event.width}, {event.height}')
-            # self.create_control_panel()
-            # self.create_canvas_image()
+            pass
 
     def handle_canvas_motion(self, event):
         # Cursor options found at:
@@ -352,6 +364,7 @@ class LithGUI:
         else:
             self.canvas.move(self.active_item_tag, dx, dy)
         # Update start position for the next motion event
+        self.recompute_mm_dimensions()
         start_x, start_y = event.x, event.y
 
     def clear_canvas(self):
@@ -367,7 +380,6 @@ class LithGUI:
             coords = [x for x in self.canvas.bbox(self._canvas_tag_image)]
             coords[2] -= 1
             coords[3] -= 1
-            # print(coords, self.tk_image.width(), self.tk_image.height())
 
         if not coords:
             pos = [10, 10]
@@ -383,6 +395,13 @@ class LithGUI:
         self.draw_crop_corner_dots([x1, y1, x2, y2])
         self._canvas_items[self._canvas_tag_rect]["crosshair"] = []
         self.draw_crop_center_crosshair([x1, y1, x2, y2])
+
+    def draw_crop_rectangle(self, coords=None):
+        if coords is None:
+            coords = self.canvas.coords(self._canvas_tag_rect)
+        self.canvas.coords(self._canvas_tag_rect, coords)
+        self.draw_crop_corner_dots(coords)
+        self.draw_crop_center_crosshair(coords)
             
     def draw_crop_corner_dots(self, coords, radius=3):
         x1, y1, x2, y2 = coords
@@ -457,6 +476,7 @@ class LithGUI:
             return [dx, dy, dx, dy]
         
         ar = self.get_aspect_ratio()
+
         coords = np.array(self.canvas.coords(self._canvas_tag_rect))
         mouse_ref_pt = np.array([start_x + dx, start_y + dy])
 
@@ -492,7 +512,6 @@ class LithGUI:
         dims = np.zeros((2))
         dims[axis] = dist          
         dims[1-axis] = sign[min(len(sign)-1, 1-axis)] * (round(abs(dist * ar)) if axis == 1 else round(abs(dist / ar)))
-
 
         # Now calculate updated coords that adhere to the side or corner constraints
         coord_update = np.array([0,0,0,0])
@@ -550,44 +569,37 @@ class LithGUI:
             inc = round((new_h - h) / 2.0)
             new_coords = [0, -inc, 0, inc]
 
-
         # If, for any dim, the size of the resulting rectangle exceeds canvas bounds,
         # then scale uniformly down until within bounds
         self.update_crop_rectangle_relative(new_coords)
 
     def update_crop_rectangle_absolute(self, coords):
         coords = self.constrain_coords_to_canvas(coords)
-
-        if self.px_mm_lock.get():
-            old_coords = self.canvas.coords(self._canvas_tag_rect)
-            self.update_entries_from_new_crop(old_coords, coords)
-
-        self.canvas.coords(self._canvas_tag_rect, coords)
-        self.draw_crop_corner_dots(coords)
-        self.draw_crop_center_crosshair(coords)
+        self.draw_crop_rectangle(coords)
 
     def update_crop_rectangle_relative(self, delta_coords):
         old_coords = self.canvas.coords(self._canvas_tag_rect)
         x1, y1, x2, y2 = old_coords
         dx1, dy1, dx2, dy2 = delta_coords
 
-        # Handle out-of-canvas-bounds move
         x_res = [x1+dx1, x2+dx2]
-        if (x_res[0] < 0) or (x_res[1] >= self.get_canvas_dims()[0]):
-            if self.ar_lock.get():
-                return
-            dx1, dx2 = 0, 0
-
         y_res = [y1+dy1, y2+dy2]
-        if (y_res[0] < 0) or (y_res[1] >= self.get_canvas_dims()[1]):
-            if self.ar_lock.get():
-                return
-            dy1, dy2 = 0, 0
 
-        x1 += dx1
-        x2 += dx2
-        y1 += dy1
-        y2 += dy2
+        out_width  = (x_res[0] < 0) or (x_res[1] >= self.get_canvas_dims()[0])
+        out_height = (y_res[0] < 0) or (y_res[1] >= self.get_canvas_dims()[1])
+
+        if (out_width or out_height) and self.ar_lock.get():
+            return
+        
+        canvas_dims = self.get_canvas_dims()
+
+        x_res[0] = max(x_res[0], 0)
+        x_res[1] = min(x_res[1], canvas_dims[0] - 1)
+        y_res[0] = max(y_res[0], 0)
+        y_res[1] = min(y_res[1], canvas_dims[1] - 1)
+
+        x1, x2 = x_res
+        y1, y2 = y_res
 
         if x1 > x2:
             x1, x2 = x2, x1
@@ -598,14 +610,7 @@ class LithGUI:
             self.active_item_loc = rect_location_props[self.active_item_loc]['flip_y']
 
         # Alter the rectangle itself
-        coords = [x1, y1, x2, y2]
-
-        if self.px_mm_lock.get():
-            self.update_entries_from_new_crop(old_coords, coords)
-
-        self.canvas.coords(self._canvas_tag_rect, coords)
-        self.draw_crop_corner_dots(coords)
-        self.draw_crop_center_crosshair(coords)
+        self.draw_crop_rectangle(coords=[x1, y1, x2, y2])
 
     def crop_box_location(self, x, y, radius=10):
         coords = self.canvas.coords(self._canvas_tag_rect)
@@ -667,8 +672,8 @@ class LithGUI:
         self.create_crop_rectangle()
 
         self.crop_height_mm, self.crop_width_mm = self.original_image.shape[:2]
-        self.crop_height_mm /= self.DPMM
-        self.crop_width_mm  /= self.DPMM
+        self.crop_height_mm /= self.PX_PER_MM_DEFAULT
+        self.crop_width_mm  /= self.PX_PER_MM_DEFAULT
         self.update_entry_text()
 
     def create_canvas_image(self, centered=True):
@@ -742,24 +747,44 @@ class LithGUI:
         coords[2] -= 1
         coords[3] -= 1
         coords = self.constrain_coords_to_canvas(coords)
-
-        old_coords = self.canvas.coords(self._canvas_tag_rect)
-        self.update_entries_from_new_crop(old_coords, coords)
+        
         self.update_crop_rectangle_absolute(coords)
+        self.recompute_mm_dimensions()
 
-    def update_entries_from_new_crop(self, old_coords, new_coords):
-        entry_w = convert_numeric_string(self.mm_W_entry_str.get())
-        entry_h = convert_numeric_string(self.mm_H_entry_str.get())        
+    def recompute_mm_dimensions(self):              
+        # Refresh the pixel-to-millimeter correspondence in the crop window
 
-        old_w, old_h = (old_coords[2]- old_coords[0] + 1), (old_coords[3]- old_coords[1] + 1)
+        new_coords = self.canvas.coords(self._canvas_tag_rect)
+
+        # Won't update actual crop size in mm if we keep aspect ratio the same
+        if self.ar_lock.get():
+            self.compute_pixels_per_mm()
+            return
+        
         new_w, new_h = (new_coords[2]- new_coords[0] + 1), (new_coords[3]- new_coords[1] + 1)
-        scale = [new_w / old_w, new_h / old_h]
 
-        self.crop_width_mm  = entry_w * scale[0]
-        self.crop_height_mm = entry_h * scale[1]
+        tk_img_scale = self._canvas_items[self._canvas_tag_image]["scale"]
+
+        self.crop_width_mm  = new_w / tk_img_scale / self.pixels_per_mm
+        self.crop_height_mm = new_h / tk_img_scale / self.pixels_per_mm
 
         self.update_entry_text()
 
+    def compute_pixels_per_mm(self):
+        x1, y1, x2, y2 = self.canvas.coords(self._canvas_tag_rect)
+        
+        px_dims = np.array([(x2 - x1 + 1), (y2 - y1 + 1)])
+        mm_dims = np.array([self.crop_width_mm, self.crop_height_mm])
+
+        axis = np.argmax(mm_dims)
+
+        tk_img_scale = self._canvas_items[self._canvas_tag_image]["scale"]
+
+        px_dim = px_dims[axis] / tk_img_scale
+        mm_dim = mm_dims[axis]
+
+        self.pixels_per_mm = px_dim / mm_dim
+        
     def fit_image_to_canvas(self):
         w_c, h_c = self.get_canvas_dims()
         w_c, h_c = float(w_c), float(h_c)
