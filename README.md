@@ -26,7 +26,8 @@ If on Windows, run setup.bat to create and activate a virtual enviroment into wh
 
 For Unix/Linux, use setup.sh to achieve the same as above
 
-## Future Work / ToDo
+## Future Work / To Do
+- Constrain crop window to tk_image bounds, or have a toggle for this and decide what the background color thickness should be in final result.
 - Incorporate option for integrating in a border around the typical image mesh. Variables like border width and depth controlled by user from fields in the GUI
 - Add preview to GUI using empirically-generated color mappings pertaining to light transmission vs PLA thickness
 - Enable custom shape profiles based on SVG or PNG masks - with a set of fun defaults in addition to ability to upload user's own
