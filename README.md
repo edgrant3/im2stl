@@ -26,6 +26,14 @@ If on Windows, run setup.bat to create and activate a virtual enviroment into wh
 
 For Unix/Linux, use setup.sh to achieve the same as above
 
+## Future Work / ToDo
+- Incorporate option for integrating in a border around the typical image mesh. Variables like border width and depth controlled by user from fields in the GUI
+- Add preview to GUI using empirically-generated color mappings pertaining to light transmission vs PLA thickness
+- Enable custom shape profiles based on SVG or PNG masks - with a set of fun defaults in addition to ability to upload user's own
+- Enable export of .3mf result directly into slicing software (like OrcaSlicer and/or Bambu Studio). I like that this option exists in Fusion and I'd like to do the same!
+- Consider porting to C++ and then using OpenGL for graphics and imgui or Qt for GUI. This python repo is a prototype for this eventual compiled app.
+- Alternatively, make this a web app! Better for sharing across 3D model sharing platforms
+
 
 
 
