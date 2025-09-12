@@ -1,6 +1,6 @@
 import tkinter as tk
 import cv2
-import re
+import copy
 import numpy as np
 from enum import Enum
 from tkinter import N, S, E, W
@@ -138,6 +138,14 @@ class LithGUI:
         self.active_item_tag = None
         self.active_item_loc = None
 
+        self.mask_out_periphery = True
+        self.peripheral_mask_opacity = 0.5
+        self.peripheral_mask_color = rgb2hex((0, 0, 0))
+        self._canvas_tag_peripheral_mask = ["p_mask_N",
+                                            "p_mask_E",
+                                            "p_mask_S",
+                                            "p_mask_W"]
+
         self._canvas_tag_image = "canvas_image"
         self._canvas_tag_rect = "cropping_rectangle"
         self._canvas_items = {}
@@ -160,11 +168,12 @@ class LithGUI:
             self.canvas.delete('all')
             self.canvas.destroy()
 
-        self.canvas_w = int(round((1.0 - self.CONTROL_PANEL_WIDTH) * self.root_w))
-        self.canvas_h = self.root_h
-
-        self.canvas = tk.Canvas(self.root, width=self.canvas_w, height=self.canvas_h, 
-                                bg=self.CANVAS_COLOR, borderwidth=0, highlightthickness=0)
+        self.canvas = tk.Canvas(self.root, 
+                                width=int(round((1.0 - self.CONTROL_PANEL_WIDTH) * self.root_w)), 
+                                height=self.root_h, 
+                                bg=self.CANVAS_COLOR, 
+                                borderwidth=0, 
+                                highlightthickness=0)
         
     def create_control_panel(self):
         if self.control_panel is not None:
@@ -277,20 +286,26 @@ class LithGUI:
         txt = [self.mm_W_entry_str.get(),
                self.mm_H_entry_str.get()]
         
-        # numeric = re.findall(r"[-+]?\d*\.?\d+", txt[idx])
         numeric = convert_numeric_string(txt[idx])
         if numeric is None:
             return
         
-        if idx == 0:
-            self.crop_width_mm = float(numeric)
-        else:
-            self.crop_height_mm = float(numeric)
+        numeric = float(numeric)
+
+        new_dims = [self.crop_width_mm, self.crop_height_mm]
+        delta = numeric / new_dims[idx]
+
+        new_dims[idx] = numeric
+        new_dims[1-idx] = new_dims[1-idx] * (1 - self.ar_lock.get() + delta * self.ar_lock.get())
+
+        self.crop_width_mm, self.crop_height_mm = new_dims
 
         self.update_crop_aspect_ratio(dim=dim)
 
         if self.ar_lock.get():
             self.compute_pixels_per_mm()
+
+        self.update_entry_text()
 
     def mark_setup_complete(self):
         self.setup_is_complete = True
@@ -388,6 +403,9 @@ class LithGUI:
 
         x1, y1, x2, y2 = coords
 
+        if self.mask_out_periphery:
+            self.create_peripheral_mask(coords)
+
         self._canvas_items[self._canvas_tag_rect]["item"] = self.canvas.create_rectangle(x1, y1, x2, y2, outline=self.CROP_COLOR, width=1, 
                                                                                          tags=self._canvas_tag_rect)                
 
@@ -400,6 +418,8 @@ class LithGUI:
         if coords is None:
             coords = self.canvas.coords(self._canvas_tag_rect)
         self.canvas.coords(self._canvas_tag_rect, coords)
+        if self.mask_out_periphery:
+            self.update_peripheral_mask()
         self.draw_crop_corner_dots(coords)
         self.draw_crop_center_crosshair(coords)
             
@@ -457,6 +477,14 @@ class LithGUI:
         if location is None:
             location = self.crop_box_location(start_x, start_y)
 
+        if location == RectLoc.CENTER:
+            coords = self.canvas.coords(self._canvas_tag_rect)
+            canvas_dims = self.get_canvas_dims()
+            out_width  = (coords[0]+dx < 0) or (coords[2]+dx >= canvas_dims[0])
+            out_height = (coords[1]+dy < 0) or (coords[3]+dy >= canvas_dims[1])
+            dx = 0 + dx * int(not out_width)
+            dy = 0 + dy * int(not out_height)
+
         coord_update = np.array([dx, dy, dx, dy])
         constrained = np.array([1,1,1,1])
         constrained[rect_location_props[location]['coord_idx']] = 0
@@ -465,6 +493,10 @@ class LithGUI:
         return coord_update
         
     def get_crop_bounding_box_update_ar_locked(self, start_x, start_y, dx, dy, location=None):
+
+        # TODO: figure out why sliding along edge is slower when running this ar_locked version
+        # TODO: clean this function up
+        # TODO: refactor later bounds checking logic and put it in here
 
         if location is None:
             location = self.crop_box_location(start_x, start_y)
@@ -479,6 +511,10 @@ class LithGUI:
 
         coords = np.array(self.canvas.coords(self._canvas_tag_rect))
         mouse_ref_pt = np.array([start_x + dx, start_y + dy])
+
+        canvas_dims = self.get_canvas_dims()
+        for i in [0, 1]:
+            mouse_ref_pt[i] = max(0, min(canvas_dims[i]-1, mouse_ref_pt[i]))   
 
         # Create mask for constrained edges of the rectangle
         constrained = np.zeros(coords.shape, dtype=np.uint8)
@@ -495,12 +531,13 @@ class LithGUI:
         dist = mouse_ref_pt[axis] - coords[opp_indices]
         sign = np.sign(dist)
         
-        # Prevent divide-by-zero undefined condition
-        if np.any(dist == 0):
-            return np.zeros((4))
-
         if len(dist) > 1:
-            bounds_ar = abs(dist[0] / dist[1])
+            # Prevent divide-by-zero undefined condition
+            if np.any(dist == 0):
+                bounds_ar = ar
+            else:
+                bounds_ar = abs(dist[0] / dist[1])
+
             # If wider aspect ratio, constrain scaling by height - & vice versa
             axis = 1 * (bounds_ar >= ar)
             dist = dist[axis]
@@ -560,15 +597,19 @@ class LithGUI:
         elif dim == 'w':
             # Hold height constant and only adjust width
             new_w = h * ar
+            print(f'{(new_w - w) / 2.0}')
             inc = round((new_w - w) / 2.0)
             new_coords = [-inc, 0, inc, 0]
 
         elif dim == 'h':
             # Hold width constant and only adjust height
             new_h = w / ar
+            print(f'{(new_h - h) / 2.0}')
             inc = round((new_h - h) / 2.0)
             new_coords = [0, -inc, 0, inc]
 
+
+        
         # If, for any dim, the size of the resulting rectangle exceeds canvas bounds,
         # then scale uniformly down until within bounds
         self.update_crop_rectangle_relative(new_coords)
@@ -579,11 +620,20 @@ class LithGUI:
 
     def update_crop_rectangle_relative(self, delta_coords):
         old_coords = self.canvas.coords(self._canvas_tag_rect)
+        # print(f'here: {old_coords}, {delta_coords}, {self.active_item_tag}, {self.active_item_loc}')
         x1, y1, x2, y2 = old_coords
         dx1, dy1, dx2, dy2 = delta_coords
 
         x_res = [x1+dx1, x2+dx2]
         y_res = [y1+dy1, y2+dy2]
+
+        if x_res[0] > x_res[1]:
+            x_res = x_res[::-1]
+            self.active_item_loc = rect_location_props[self.active_item_loc]['flip_x']
+        
+        if y_res[0] > y_res[1]:
+            y_res = y_res[::-1]
+            self.active_item_loc = rect_location_props[self.active_item_loc]['flip_y']
 
         out_width  = (x_res[0] < 0) or (x_res[1] >= self.get_canvas_dims()[0])
         out_height = (y_res[0] < 0) or (y_res[1] >= self.get_canvas_dims()[1])
@@ -601,13 +651,13 @@ class LithGUI:
         x1, x2 = x_res
         y1, y2 = y_res
 
-        if x1 > x2:
-            x1, x2 = x2, x1
-            self.active_item_loc = rect_location_props[self.active_item_loc]['flip_x']
+        # if x1 > x2:
+        #     x1, x2 = x2, x1
+        #     self.active_item_loc = rect_location_props[self.active_item_loc]['flip_x']
         
-        if y1 > y2:
-            y1, y2 = y2, y1
-            self.active_item_loc = rect_location_props[self.active_item_loc]['flip_y']
+        # if y1 > y2:
+        #     y1, y2 = y2, y1
+        #     self.active_item_loc = rect_location_props[self.active_item_loc]['flip_y']
 
         # Alter the rectangle itself
         self.draw_crop_rectangle(coords=[x1, y1, x2, y2])
@@ -655,14 +705,17 @@ class LithGUI:
 
     def load_image(self):
         self.clear_canvas()
+
         self.image_path = filedialog.askopenfilename(
-        title="Select Image File",
-        filetypes=[
+            title="Select Image File",
+            filetypes=[
             ("Image Files", "*.jpg;*.jpeg;*.png;*.gif;*.bmp"),
             ("All Files", "*.*")
         ])
-        self.original_image = cv2.imread(self.image_path)
+
+        self.original_image     = cv2.imread(self.image_path)
         self.intermediate_image = cv2.imread(self.image_path)
+
         self.tk_image = cv2_to_tk(self.original_image)        
 
         scale = self.fit_image_to_canvas()
@@ -675,6 +728,59 @@ class LithGUI:
         self.crop_height_mm /= self.PX_PER_MM_DEFAULT
         self.crop_width_mm  /= self.PX_PER_MM_DEFAULT
         self.update_entry_text()
+
+
+
+    def update_peripheral_mask(self):
+
+        crop_coords = self.canvas.coords(self._canvas_tag_rect)        
+
+        for i, pm in enumerate(self._canvas_tag_peripheral_mask):
+            curr_coords = self.canvas.coords(pm)
+
+            idx = 0 * (i == 3) + 1 * (i == 0) + 2 * (i == 1) + 3 * (i == 2)
+            axis = int(idx % 2)
+            
+            p_coords = copy.deepcopy(crop_coords) if (axis == 0) else copy.deepcopy(curr_coords)
+
+            p_coords[(idx -2) % 4] = crop_coords[idx]
+            p_coords[idx] = curr_coords[idx]
+
+            self.canvas.coords(pm, p_coords)
+
+    def create_peripheral_mask(self, crop_coords=None):
+        if crop_coords is None:
+            crop_coords = self.canvas.coords(self._canvas_tag_rect)
+
+        canvas_dims = self.get_canvas_dims()
+
+        # self.peripheral_mask_opacity = 0.5
+        # self.peripheral_mask_color = rgb2hex((0, 0, 0))
+
+        for i, pm in enumerate(self._canvas_tag_peripheral_mask):
+            self._canvas_items[pm] = {}
+            
+
+            # find index into coords for each N,E,S,W cardinal rectangle of the peripheral mask
+            # N (idx=0) : y1 (coords[1])
+            # E (idx=1) : x2 (coords[2])
+            # S (idx=2) : y2 (coords[3])
+            # W (idx=3) : x1 (coords[0])
+            idx = 0 * (i == 3) + 1 * (i == 0) + 2 * (i == 1) + 3 * (i == 2)
+            axis = int(idx % 2)
+
+            p_coords = copy.deepcopy(crop_coords) if (axis == 0) else [0, 0, canvas_dims[0], canvas_dims[1]]
+
+            p_coords[(idx - 2) % 4] = crop_coords[idx]
+            p_coords[idx] = 0 + (canvas_dims[axis] - 1) * int(idx >= 2)
+
+            print(f'{pm}, {idx}, {axis}, {p_coords}')
+
+            self._canvas_items[pm]["item"] = self.canvas.create_rectangle(p_coords[0], p_coords[1], p_coords[2], p_coords[3],
+                                                                          outline=self.peripheral_mask_color,
+                                                                          fill=self.peripheral_mask_color,
+                                                                          width=1,
+                                                                          tags=pm)
 
     def create_canvas_image(self, centered=True):
         self.canvas.delete(self._canvas_tag_image)
