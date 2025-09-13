@@ -13,38 +13,45 @@ from utils import STL_Tri, \
     write_binary_stl, \
     convert_stl_to_3mf
 
-"""
-args:
-- pixel_size: inverse of pixel density (mm per dot instead of DPI)
-- image_width_mm: width of resulting image panel in mm
-- image_height_mm: height of resulting image panel in mm
-- min_thickness: minimum thickness of the lithophane image panel in mm
-- max_thickness: maximum thickness of the lithophane image panel in mm
-"""
+class LithophaneGenerator():
 
-def create_lithophane(args, img_path):
-    
-    # Get image name without extension so we can save result under the same
-    name = os.path.splitext(os.path.basename(img_path))[0]
+    def __init__(self):
 
-    # Load in image using openCV
-    img_bgr = cv2.imread(img_path)
+        self.image = None # BGR image from opencv
+        self.mask  = None
 
-    # Calculate aspect ratio from desired output dimensions
-    ar = args.image_width_mm / args.image_height_mm
+        self.px_size_mm = None # inverse of pixel density (mm per dot instead of DPI)
+        self.img_w_mm   = None # width of resulting image panel in mm
+        self.img_h_mm   = None # height of resulting image panel in mm
+        self.thk_min    = None # minimum thickness of the lithophane image panel in mm
+        self.thk_max    = None # maximum thickness of the lithophane image panel in mm
 
-    # Crop image as close to the proper aspect ratio as possible
-    offset
-    img_bgr = crop_to_aspect_ratio(img_bgr, ar, True, offset)
+    def load_config(self, config_json_file):
+        with open(config_json_file, 'r') as file:
+            self.args = json.load(file)
 
-    # Compute strech values for each axis to make the result exactly match desired dimensions
-    # NOTE: one of the 2 values will always be 1.0
+    def load_image_from_file(self, img_path):
+        self.set_image(cv2.imread(img_path))
 
-    pass
+    def set_image(self, bgr_image):
+        self.image = bgr_image
+        self.mask = np.ones((self.image.shape[:2]))
 
+    def compute_px_size_mm(self):
+        self.px_size_mm = min((self.img_w_mm / float(self.image.shape[1])), 
+                              (self.img_h_mm / float(self.image.shape[0])))
+
+    def create(self):
+        
+        # TODO: Compute strech values for each axis to make the result exactly match desired dimensions
+        # NOTE: one of the 2 values will always be 1.0
+
+        pass
 
 
 if __name__ == "__main__":
+
+    lithgen = LithophaneGenerator()
 
     img_path = filedialog.askopenfilename(
         title="Select Image File",
@@ -57,7 +64,6 @@ if __name__ == "__main__":
     if img_path:
         print(f"Selected file: {img_path}")
 
-    with open('config.json', 'r') as file:
-        args = json.load(file)
-    
-    create_lithophane(args, img_path)
+    lithgen.load_image_from_file(img_path)
+    lithgen.load_config('config.json')
+    lithgen.create()
