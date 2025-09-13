@@ -300,10 +300,17 @@ class LithGUI:
 
         self.crop_width_mm, self.crop_height_mm = new_dims
 
-        self.update_crop_aspect_ratio(dim=dim)
+        oob = self.update_crop_aspect_ratio(dim=dim)
 
         if self.ar_lock.get():
             self.compute_pixels_per_mm()
+        else:
+            # Handle case where ar is not locked and we go outside canvas bounds
+            crop_w_px2mm, crop_h_px2mm = self.get_mm_dims_of_crop_coords()
+            if oob[0] or oob[2]:
+                self.crop_width_mm = crop_w_px2mm
+            if oob[1] or oob[3]:
+                self.crop_height_mm = crop_h_px2mm
 
         self.update_entry_text()
 
@@ -379,7 +386,12 @@ class LithGUI:
         else:
             self.canvas.move(self.active_item_tag, dx, dy)
         # Update start position for the next motion event
-        self.recompute_mm_dimensions()
+        
+        if self.ar_lock.get():
+            self.compute_pixels_per_mm()
+        else:
+            self.recompute_mm_dimensions()
+
         start_x, start_y = event.x, event.y
 
     def clear_canvas(self):
@@ -617,15 +629,14 @@ class LithGUI:
             inc = round((new_h - h) / 2.0)
             new_coords = [0, -inc, 0, inc]
 
-
-        
         # If, for any dim, the size of the resulting rectangle exceeds canvas bounds,
         # then scale uniformly down until within bounds
-        self.update_crop_rectangle_relative(new_coords)
+        return self.update_crop_rectangle_relative(new_coords)
 
     def update_crop_rectangle_absolute(self, coords):
-        coords = self.constrain_coords_to_canvas(coords)
+        coords, out_of_bounds = self.constrain_coords_to_canvas(coords)
         self.draw_crop_rectangle(coords)
+        return out_of_bounds
 
     def update_crop_rectangle_relative(self, delta_coords):
         old_coords = self.canvas.coords(self._canvas_tag_rect)
@@ -643,7 +654,7 @@ class LithGUI:
             y_res = y_res[::-1]
             self.active_item_loc = rect_location_props[self.active_item_loc]['flip_y']
         
-        self.update_crop_rectangle_absolute(coords=[x_res[0], y_res[0], x_res[1], y_res[1]])
+        return self.update_crop_rectangle_absolute(coords=[x_res[0], y_res[0], x_res[1], y_res[1]])
 
     def crop_box_location(self, x, y, radius=10):
         coords = self.canvas.coords(self._canvas_tag_rect)
@@ -822,41 +833,33 @@ class LithGUI:
 
         w_c, h_c = self.get_canvas_dims()
 
+        out_of_bounds = [coords[0] < 0, coords[1] < 0, coords[2] >= w_c, coords[3] >= h_c]
+        
         coords[0] = max(0, coords[0])
         coords[1] = max(0, coords[1])
         coords[2] = min(w_c-1, coords[2])
         coords[3] = min(h_c-1, coords[3])
 
-        return coords
+        return coords, out_of_bounds
 
     def fit_crop_to_image(self):
         coords = [x for x in self.canvas.bbox(self._canvas_tag_image)]
         coords[2] -= 1
         coords[3] -= 1
-
-        ar_lock_status = self.ar_lock.get()
-        self.ar_lock.set(0)
         self.update_crop_rectangle_absolute(coords)
         self.recompute_mm_dimensions()
-        self.ar_lock.set(ar_lock_status)
+
+    def get_mm_dims_of_crop_coords(self):
+        coords = self.canvas.coords(self._canvas_tag_rect)
+        w_px, h_px = (coords[2] - coords[0] + 1), (coords[3] - coords[1] + 1)
+        tk_img_scale = self._canvas_items[self._canvas_tag_image]["scale"]
+
+        return (w_px / tk_img_scale / self.pixels_per_mm, 
+                h_px / tk_img_scale / self.pixels_per_mm)
 
     def recompute_mm_dimensions(self):              
         # Refresh the pixel-to-millimeter correspondence in the crop window
-
-        new_coords = self.canvas.coords(self._canvas_tag_rect)
-
-        # Won't update actual crop size in mm if we keep aspect ratio the same
-        if self.ar_lock.get():
-            self.compute_pixels_per_mm()
-            return
-        
-        new_w, new_h = (new_coords[2]- new_coords[0] + 1), (new_coords[3]- new_coords[1] + 1)
-
-        tk_img_scale = self._canvas_items[self._canvas_tag_image]["scale"]
-
-        self.crop_width_mm  = new_w / tk_img_scale / self.pixels_per_mm
-        self.crop_height_mm = new_h / tk_img_scale / self.pixels_per_mm
-
+        self.crop_width_mm, self.crop_height_mm = self.get_mm_dims_of_crop_coords()
         self.update_entry_text()
 
     def compute_pixels_per_mm(self):
