@@ -118,8 +118,8 @@ class LithGUI:
             self.root.attributes('-fullscreen', True)
         else:
             screen_w, screen_h = self.get_screen_dims()
-            self.root_w = int(round(0.75 * screen_w))
-            self.root_h = int(round(0.75 * screen_h))
+            self.root_w = int(round(0.5 * screen_w))
+            self.root_h = int(round(0.5 * screen_h))
             offset_x = int(round((screen_w - self.root_w) / 2))
             offset_y = int(round((screen_h - self.root_h) / 2))
             self.root.geometry(f"{self.root_w}x{self.root_h}+{offset_x}+{offset_y}")
@@ -494,7 +494,6 @@ class LithGUI:
         
     def get_crop_bounding_box_update_ar_locked(self, start_x, start_y, dx, dy, location=None):
 
-        # TODO: figure out why sliding along edge is slower when running this ar_locked version
         # TODO: clean this function up
         # TODO: refactor later bounds checking logic and put it in here
 
@@ -504,15 +503,25 @@ class LithGUI:
         if location == RectLoc.NULL:
             return [0, 0, 0, 0]
         
-        if location == RectLoc.CENTER:
-            return [dx, dy, dx, dy]
         
         ar = self.get_aspect_ratio()
 
         coords = np.array(self.canvas.coords(self._canvas_tag_rect))
+        canvas_dims = self.get_canvas_dims()
+        
+        # if location == RectLoc.CENTER:
+        #     return [dx, dy, dx, dy]
+        if location == RectLoc.CENTER:
+            # coords = self.canvas.coords(self._canvas_tag_rect)
+            # canvas_dims = self.get_canvas_dims()
+            out_width  = (coords[0]+dx < 0) or (coords[2]+dx >= canvas_dims[0])
+            out_height = (coords[1]+dy < 0) or (coords[3]+dy >= canvas_dims[1])
+            dx = 0 + dx * int(not out_width)
+            dy = 0 + dy * int(not out_height)
+            return [dx, dy, dx, dy]
+
         mouse_ref_pt = np.array([start_x + dx, start_y + dy])
 
-        canvas_dims = self.get_canvas_dims()
         for i in [0, 1]:
             mouse_ref_pt[i] = max(0, min(canvas_dims[i]-1, mouse_ref_pt[i]))   
 
@@ -620,7 +629,6 @@ class LithGUI:
 
     def update_crop_rectangle_relative(self, delta_coords):
         old_coords = self.canvas.coords(self._canvas_tag_rect)
-        # print(f'here: {old_coords}, {delta_coords}, {self.active_item_tag}, {self.active_item_loc}')
         x1, y1, x2, y2 = old_coords
         dx1, dy1, dx2, dy2 = delta_coords
 
@@ -634,33 +642,8 @@ class LithGUI:
         if y_res[0] > y_res[1]:
             y_res = y_res[::-1]
             self.active_item_loc = rect_location_props[self.active_item_loc]['flip_y']
-
-        out_width  = (x_res[0] < 0) or (x_res[1] >= self.get_canvas_dims()[0])
-        out_height = (y_res[0] < 0) or (y_res[1] >= self.get_canvas_dims()[1])
-
-        if (out_width or out_height) and self.ar_lock.get():
-            return
         
-        canvas_dims = self.get_canvas_dims()
-
-        x_res[0] = max(x_res[0], 0)
-        x_res[1] = min(x_res[1], canvas_dims[0] - 1)
-        y_res[0] = max(y_res[0], 0)
-        y_res[1] = min(y_res[1], canvas_dims[1] - 1)
-
-        x1, x2 = x_res
-        y1, y2 = y_res
-
-        # if x1 > x2:
-        #     x1, x2 = x2, x1
-        #     self.active_item_loc = rect_location_props[self.active_item_loc]['flip_x']
-        
-        # if y1 > y2:
-        #     y1, y2 = y2, y1
-        #     self.active_item_loc = rect_location_props[self.active_item_loc]['flip_y']
-
-        # Alter the rectangle itself
-        self.draw_crop_rectangle(coords=[x1, y1, x2, y2])
+        self.update_crop_rectangle_absolute(coords=[x_res[0], y_res[0], x_res[1], y_res[1]])
 
     def crop_box_location(self, x, y, radius=10):
         coords = self.canvas.coords(self._canvas_tag_rect)
@@ -728,8 +711,6 @@ class LithGUI:
         self.crop_height_mm /= self.PX_PER_MM_DEFAULT
         self.crop_width_mm  /= self.PX_PER_MM_DEFAULT
         self.update_entry_text()
-
-
 
     def update_peripheral_mask(self):
 
